@@ -4,7 +4,34 @@ class Modules {
 
     Modules(){}
 
-    static async getAllModulesWithSubmodules (){
+    static async getAllModulesWithSubmodulesRaw() {
+    const query = `
+      SELECT 
+        m.module_id,
+        m.name as module_name,
+        m.description,
+        s.submodule_id,
+        s.name,
+        s.description,
+        s.content_url,
+        s.order_index,
+        s.duration,
+        s.created_at
+      FROM modules AS m
+      LEFT JOIN submodules AS s ON s.module_id = m.module_id
+      ORDER BY m.module_id, s.order_index;
+    `;
+
+    try {
+      const [rows] = await db.query(query);
+      return rows; // flat list of modules + submodules
+    } catch (error) {
+      console.error("Error in getAllModulesWithSubmodulesRaw:", error);
+      throw error;
+    }
+  }
+
+    static async getAllModulesWithSubmodulesOld (){
         const [rows] = await db.query(`
     SELECT 
       m.module_id,
@@ -48,6 +75,41 @@ class Modules {
         return Object.values(modulesMap);
     };
 
+
+    static async getAllModulesWithSubmodules() {
+    const [modules] = await db.execute(`SELECT * FROM modules`);
+    const [submodules] = await db.execute(`SELECT * FROM submodules`);
+
+    // Group submodules by module_id
+    const grouped = modules.map((m) => ({
+      module_id: m.module_id,
+      module_name: m.module_name,
+      module_description: m.module_description,
+      submodules: submodules
+        .filter((s) => s.module_id === m.module_id)
+        .map((s) => ({
+          submodule_id: s.submodule_id,
+          submodule_name: s.submodule_name,
+          submodule_description: s.submodule_description,
+        })),
+    }));
+
+    return grouped;
+  }
+
+  static async getAllModules(){
+    const [modules] =  await db.execute(`
+        SELECT 
+        module_id,
+        name AS module_name,
+        description AS module_description,
+        order_index,
+        duration,
+        created_at
+      FROM modules
+      ORDER BY module_id;`);
+    return modules;
+  }
 }
 
 
