@@ -1,11 +1,12 @@
 const db = require("../config/db");
 
 class User {
-  constructor(id, name, email, password, first_visit_welcome, first_visit_driver) {
+  constructor(id, name, email, password, role ,first_visit_welcome, first_visit_driver) {
     this.id = id;
     this.name = name;
     this.email = email;
     this.password = password;
+    this.role = role;
     this.first_visit_welcome = first_visit_welcome;
     this.first_visit_driver = first_visit_driver;
   }
@@ -28,8 +29,8 @@ class User {
   static async findByEmail(email) {
     const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
     if (rows.length === 0) return null;
-    const { id, name, email: userEmail, password, first_visit_welcome, first_visit_driver} = rows[0];
-    return new User(id, name, userEmail, password, first_visit_welcome, first_visit_driver);
+    const { id, name, email: userEmail, password , role,first_visit_welcome, first_visit_driver} = rows[0];
+    return new User(id, name, userEmail, password, role ,first_visit_welcome, first_visit_driver);
   }
 
   static async findAll() {

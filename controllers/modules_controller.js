@@ -16,16 +16,16 @@ const getAllModulesWithSubmodulesWithStatus = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // 1️⃣ Fetch all modules with their submodules
+    //Fetch all modules with their submodules
     const modulesWithSubModules = (await Modules.getAllModulesWithSubmodulesRaw()) || [];
 
-    // 2️⃣ Fetch all modules (for names/descriptions of modules without submodules)
+    //Fetch all modules (for names/descriptions of modules without submodules)
     const allModules = (await Modules.getAllModules()) || []; // Make sure you have this method in your Module model
 
-    // 3️⃣ Fetch user progress for this user
+    //Fetch user progress for this user
     const userProgresses = (await UserProgress.getAllByUser(userId)) || [];
 
-    // 🧩 CASE 1: If user has no progress yet — everything locked
+    //CASE 1: If user has no progress yet — everything locked
     if (!Array.isArray(userProgresses) || userProgresses.length === 0) {
       // Group by module_id
       const allLocked = allModules.map(mod => ({
@@ -50,7 +50,7 @@ const getAllModulesWithSubmodulesWithStatus = async (req, res) => {
       return res.status(200).json(allLocked);
     }
 
-    // 4️⃣ Build lookup map for user progress
+    // Build lookup map for user progress
     const progressMap = new Map();
     userProgresses.forEach(progress => {
       let completed = progress.completed_submodules;
@@ -77,11 +77,11 @@ const getAllModulesWithSubmodulesWithStatus = async (req, res) => {
       });
     });
 
-    // 5️⃣ Identify which module is currently active (in progress)
+    //Identify which module is currently active (in progress)
     const activeModuleId = [...progressMap.entries()]
       .find(([_, data]) => data.current != null)?.[0];
 
-    // 6️⃣ Group and assign submodule statuses
+    //Group and assign submodule statuses
     const groupedModules = modulesWithSubModules.reduce((acc, row) => {
       let module = acc.find(m => m.module_id === row.module_id);
       if (!module) {
@@ -119,7 +119,7 @@ const getAllModulesWithSubmodulesWithStatus = async (req, res) => {
       return acc;
     }, []);
 
-    // 7️⃣ Add missing modules (no submodules)
+    // Add missing modules (no submodules)
     allModules.forEach(mod => {
       const exists = groupedModules.some(m => m.module_id === mod.module_id);
       if (!exists) {
@@ -133,7 +133,7 @@ const getAllModulesWithSubmodulesWithStatus = async (req, res) => {
       }
     });
 
-    // 8️⃣ Determine module-level status
+    // Determine module-level status
     groupedModules.forEach(module => {
       const progress = progressMap.get(module.module_id);
       if (!progress) {
@@ -146,7 +146,7 @@ const getAllModulesWithSubmodulesWithStatus = async (req, res) => {
       }
     });
 
-    // 9️⃣ Lock all modules after the active one
+    // Lock all modules after the active one
     let lockNext = false;
     const finalModules = groupedModules
       .sort((a, b) => a.module_id - b.module_id)
@@ -162,10 +162,93 @@ const getAllModulesWithSubmodulesWithStatus = async (req, res) => {
         return m;
       });
 
-    // ✅ 10️⃣ Return structured response
+    // Return structured response
     res.status(200).json(finalModules);
   } catch (error) {
-    console.error("❌ Error in getAllModulesWithSubmodulesWithStatus:", error);
+    console.error(" Error in getAllModulesWithSubmodulesWithStatus:", error);
+    res.status(500).json({
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
+
+const getModuleByIdWithSubmodulesWithStatus = async (req, res) => {
+  try {
+    const userId = req.user.user_id || req.user.id;
+    const { moduleId } = req.params;
+
+    // 1. Fetch module + submodules
+    const moduleData = await Modules.getModuleWithSubmodules(moduleId);
+
+    if (!moduleData) {
+      return res.status(404).json({ message: "Module not found" });
+    }
+
+    // Base structure
+    const moduleInfo = {
+      module_id: moduleData.module_id,
+      module_name: moduleData.module_name,
+      module_description: moduleData.module_description,
+      submodules: [],
+      status: "locked",
+    };
+
+    // 2. Fetch user progress
+    const userProgress = await UserProgress.getByUserAndModule(userId, moduleId);
+
+    // 3. If no user progress → everything locked
+    if (!userProgress) {
+      moduleInfo.submodules = moduleData.submodules.map((row) => ({
+        ...row,
+        status: "locked",
+      }));
+      return res.status(200).json(moduleInfo);
+    }
+
+    // 4. Normalize completed list BEFORE mapping
+    let completed = userProgress.completed_submodules;
+
+    if (!Array.isArray(completed)) {
+      try {
+        completed = JSON.parse(completed);
+      } catch {
+        completed = completed
+          ? completed.toString().split(",").map((s) => s.trim())
+          : [];
+      }
+    }
+
+    const completedSet = new Set(completed.map(String));
+    const current = userProgress.current_submodule_id
+      ? String(userProgress.current_submodule_id)
+      : null;
+
+    // 5. Assign status to submodules
+    moduleInfo.submodules = moduleData.submodules.map((row) => {
+      const subId = String(row.submodule_id);
+      let status = "locked";
+
+      if (completedSet.has(subId)) status = "completed";
+      else if (current === subId) status = "in_progress";
+
+      return { ...row, status };
+    });
+
+    // 6. Determine module-level status
+    const statuses = moduleInfo.submodules.map((s) => s.status);
+
+    if (statuses.every((s) => s === "completed")) {
+      moduleInfo.status = "completed";
+    } else if (statuses.includes("in_progress")) {
+      moduleInfo.status = "in_progress";
+    } else {
+      moduleInfo.status = "locked";
+    }
+
+    return res.status(200).json(moduleInfo);
+  } catch (error) {
+    console.error("Error in getModuleWithSubmodulesWithStatus:", error);
     res.status(500).json({
       message: "Internal Server Error",
       error: error.message,
@@ -176,7 +259,10 @@ const getAllModulesWithSubmodulesWithStatus = async (req, res) => {
 
 
 
+
+
 module.exports = {
   getModulesWithSubmodules,
-  getAllModulesWithSubmodulesWithStatus
+  getAllModulesWithSubmodulesWithStatus,
+  getModuleByIdWithSubmodulesWithStatus
 }
