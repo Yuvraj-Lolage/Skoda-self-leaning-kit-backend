@@ -1,6 +1,15 @@
 const { Modules } = require('../models/modules');
 const { UserProgress } = require('../models/user_progress');
 
+const getAllModules = async (req, res) => {
+  try {
+    const modules = await Modules.getAllModules();
+    res.json(modules);
+  } catch (err) {
+    console.error("Error fetching modules:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}
 
 const getModulesWithSubmodules = async (req, res) => {
   try {
@@ -257,6 +266,55 @@ const getModuleByIdWithSubmodulesWithStatus = async (req, res) => {
 };
 
 
+// const createModule = async (req, res) => {
+//   try {
+//     const { module_name, module_description, order_index, duration } = req.body;
+//     const newModule = await Modules.createModule({ module_name, module_description, order_index, duration });
+//     res.status(201).json(newModule);
+//   } catch (err) {
+//     console.error("Error creating module:", err);
+//     res.status(500).json({ error: "Internal server error" });
+//   }
+// }
+
+const createModule = async (req, res) => {
+  try {
+    const { module_name, module_description, order_index, duration } = req.body;
+
+    // 1️⃣ Create module in DB
+    const newModule = await Modules.createModule({
+      module_name,
+      module_description,
+      order_index,
+      duration
+    });
+
+    // 2️⃣ Build folder path using order_index
+    const folderPath = path.join(SHARED_BASE, `module_${order_index}`);
+
+    // 3️⃣ Create folder if not exists
+    try {
+      if (!fs.existsSync(folderPath)) {
+        fs.mkdirSync(folderPath, { recursive: true });
+      }
+    } catch (folderErr) {
+      console.error("Error creating folder:", folderErr);
+      // Continue without failing module creation
+    }
+
+    // 4️⃣ Add folder path to response
+    newModule.folder_path = folderPath;
+
+    // 5️⃣ Send final response
+    res.status(201).json(newModule);
+
+  } catch (err) {
+    console.error("Error creating module:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+
 
 
 
@@ -264,5 +322,7 @@ const getModuleByIdWithSubmodulesWithStatus = async (req, res) => {
 module.exports = {
   getModulesWithSubmodules,
   getAllModulesWithSubmodulesWithStatus,
-  getModuleByIdWithSubmodulesWithStatus
+  getModuleByIdWithSubmodulesWithStatus,
+  getAllModules,
+  createModule
 }

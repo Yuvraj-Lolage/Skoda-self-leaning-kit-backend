@@ -1,8 +1,26 @@
 const db = require("../config/db");
+const fs = require("fs");
+const path = require("path");
+
 
 class Modules {
 
   Modules() { }
+
+  static async getAllModules(){
+     const query = `
+      SELECT *
+      FROM modules
+      ORDER BY m.module_id, s.order_index;
+    `;
+     try {
+      const [rows] = await db.query(query);
+      return rows;
+    } catch (error) {
+      console.error("Error in getAllModulesWithSubmodulesRaw:", error);
+      throw error;
+    }
+  }
 
   static async getAllModulesWithSubmodulesRaw() {
     const query = `
@@ -133,7 +151,6 @@ class Modules {
     };
   }
 
-
   static async getAllModules() {
     const [modules] = await db.execute(`
         SELECT 
@@ -147,7 +164,22 @@ class Modules {
       ORDER BY module_id;`);
     return modules;
   }
+
+  static async createModule({ module_name, module_description, order_index, duration }) {
+    const [result] = await db.execute(
+      `INSERT INTO modules (name, description, order_index, duration) VALUES (?, ?, ?, ?)`,
+      [module_name, module_description, order_index, duration]
+    );
+    return {
+      module_id: result.insertId,
+      module_name,
+      module_description,
+      order_index,
+      duration
+    };
+  }  
 }
+
 
 
 
