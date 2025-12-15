@@ -6,6 +6,7 @@ const path = require("path");
 const { userRouter } = require('./routes/user_router');
 const ModulesRouter = require('./routes/module_router');
 const SubModuleRouter = require('./routes/sub_module_router');
+const AssessmentRouter = require('./routes/assessment_router');
 
 
 const app = express();
@@ -17,6 +18,7 @@ app.use(express.json());
 app.use('/user', userRouter);
 app.use('/module', ModulesRouter);
 app.use('/submodule', SubModuleRouter);
+app.use('/assessment', AssessmentRouter);
 
 //shared folder setup
 const sharedFolder = "/Users/yuvrajsatishlolage/Projects/Skoda_project/Skoda-self-leaning-kit-backend/network_shared_folder"
