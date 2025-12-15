@@ -11,6 +11,11 @@ class SubModule {
         return rows[0];
     };
 
+    static async getSubModuleInModuleWithId (moduleId, submoduleId){
+        const [rows] = await db.query(`select * from submodules where module_id = ${ moduleId } and  submodule_id = ${ submoduleId };`);
+        return rows[0];
+    };
+
 }
 
 

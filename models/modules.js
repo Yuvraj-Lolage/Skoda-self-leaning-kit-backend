@@ -1,10 +1,28 @@
 const db = require("../config/db");
+const fs = require("fs");
+const path = require("path");
+
 
 class Modules {
 
-    Modules(){}
+  Modules() { }
 
-    static async getAllModulesWithSubmodulesRaw() {
+  static async getAllModules(){
+     const query = `
+      SELECT *
+      FROM modules
+      ORDER BY m.module_id, s.order_index;
+    `;
+     try {
+      const [rows] = await db.query(query);
+      return rows;
+    } catch (error) {
+      console.error("Error in getAllModulesWithSubmodulesRaw:", error);
+      throw error;
+    }
+  }
+
+  static async getAllModulesWithSubmodulesRaw() {
     const query = `
       SELECT 
         m.module_id,
@@ -31,8 +49,8 @@ class Modules {
     }
   }
 
-    static async getAllModulesWithSubmodulesOld (){
-        const [rows] = await db.query(`
+  static async getAllModulesWithSubmodulesOld() {
+    const [rows] = await db.query(`
     SELECT 
       m.module_id,
       m.name AS module_name,
@@ -48,35 +66,35 @@ class Modules {
     ORDER BY m.module_id, s.order_index
   `);
 
-        const modulesMap = {};
+    const modulesMap = {};
 
-        rows.forEach(row => {
-            if (!modulesMap[row.module_id]) {
-                modulesMap[row.module_id] = {
-                    module_id: row.module_id,
-                    module_name: row.module_name,
-                    module_description: row.module_description,
-                    submodules: [],
-                };
-            }
+    rows.forEach(row => {
+      if (!modulesMap[row.module_id]) {
+        modulesMap[row.module_id] = {
+          module_id: row.module_id,
+          module_name: row.module_name,
+          module_description: row.module_description,
+          submodules: [],
+        };
+      }
 
-            if (row.submodule_id) {
-                modulesMap[row.module_id].submodules.push({
-                    submodule_id: row.submodule_id,
-                    submodule_name: row.submodule_name,
-                    submodule_description: row.submodule_description,
-                    content_url: row.content_url,
-                    order_index: row.order_index,
-                    duration: row.duration,
-                });
-            }
+      if (row.submodule_id) {
+        modulesMap[row.module_id].submodules.push({
+          submodule_id: row.submodule_id,
+          submodule_name: row.submodule_name,
+          submodule_description: row.submodule_description,
+          content_url: row.content_url,
+          order_index: row.order_index,
+          duration: row.duration,
         });
+      }
+    });
 
-        return Object.values(modulesMap);
-    };
+    return Object.values(modulesMap);
+  };
 
 
-    static async getAllModulesWithSubmodules() {
+  static async getAllModulesWithSubmodules() {
     const [modules] = await db.execute(`SELECT * FROM modules`);
     const [submodules] = await db.execute(`SELECT * FROM submodules`);
 
@@ -97,8 +115,44 @@ class Modules {
     return grouped;
   }
 
-  static async getAllModules(){
-    const [modules] =  await db.execute(`
+  static async getModuleWithSubmodules(moduleId) {
+    // Get module by ID
+    const [modules] = await db.execute(
+      `SELECT * FROM modules WHERE module_id = ?`,
+      [moduleId]
+    );
+
+    // If module not found
+    if (!modules || modules.length === 0) {
+      return null; // or return {}, depending on your preference
+    }
+
+    const module = modules[0];
+
+    // Get submodules for this module
+    const [submodules] = await db.execute(
+      `SELECT * FROM submodules WHERE module_id = ? ORDER BY order_index ASC`,
+      [moduleId]
+    );
+
+    return {
+      module_id: module.module_id,
+      module_name: module.name,
+      module_description: module.description,
+      submodules: submodules.map((s) => ({
+        submodule_id: s.submodule_id,
+        submodule_name: s.name,
+        submodule_description: s.description,
+        order_index: s.order_index,
+        content_url: s.content_url,
+        duration: s.duration,
+        created_at: s.created_at,
+      })),
+    };
+  }
+
+  static async getAllModules() {
+    const [modules] = await db.execute(`
         SELECT 
         module_id,
         name AS module_name,
@@ -110,10 +164,25 @@ class Modules {
       ORDER BY module_id;`);
     return modules;
   }
+
+  static async createModule({ module_name, module_description, order_index, duration }) {
+    const [result] = await db.execute(
+      `INSERT INTO modules (name, description, order_index, duration) VALUES (?, ?, ?, ?)`,
+      [module_name, module_description, order_index, duration]
+    );
+    return {
+      module_id: result.insertId,
+      module_name,
+      module_description,
+      order_index,
+      duration
+    };
+  }  
 }
 
 
 
+
 module.exports = {
-    Modules
+  Modules
 }

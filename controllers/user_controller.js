@@ -24,7 +24,10 @@ const userLogin = async (req, res) => {
                 const payload = {
                     id: existingUser.id,
                     name: existingUser.name,
-                    email: existingUser.email
+                    email: existingUser.email,
+                    role: existingUser.role,
+                    first_visit_welcome: existingUser.first_visit_welcome,
+                    first_visit_driver: existingUser.first_visit_driver
                 };
 
                 const token = generateToken(payload);
