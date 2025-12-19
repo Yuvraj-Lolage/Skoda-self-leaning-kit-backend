@@ -7,20 +7,18 @@ class Modules {
 
   Modules() { }
 
-  static async getAllModules(){
-     const query = `
-      SELECT *
-      FROM modules
-      ORDER BY m.module_id, s.order_index;
-    `;
-     try {
-      const [rows] = await db.query(query);
-      return rows;
-    } catch (error) {
-      console.error("Error in getAllModulesWithSubmodulesRaw:", error);
-      throw error;
-    }
-  }
+  // static async getAllModules() {
+  //   const query = `
+  //     SELECT * FROM modules ORDER BY order_index;
+  //   `;
+  //   try {
+  //     const [rows] = await db.query(query);
+  //     return rows;
+  //   } catch (error) {
+  //     console.error("Error in getAllModulesWithSubmodulesRaw:", error);
+  //     throw error;
+  //   }
+  // }
 
   static async getAllModulesWithSubmodulesRaw() {
     const query = `
@@ -161,7 +159,7 @@ class Modules {
         duration,
         created_at
       FROM modules
-      ORDER BY module_id;`);
+      ORDER BY order_index;`);
     return modules;
   }
 
@@ -177,10 +175,24 @@ class Modules {
       order_index,
       duration
     };
-  }  
+  }
+
+  static async getMaxOrderIndex() {
+    const [rows] = await db.execute(`SELECT MAX(order_index) AS max_order_index FROM modules`);
+    return rows[0].max_order_index || -1;
+  }
+
+  static async shiftModuleOrders(order_index) {
+    const [result] = await db.execute(
+      `UPDATE modules
+      SET order_index = order_index + 1
+      WHERE order_index >= ?
+      ORDER BY order_index DESC`,
+      [order_index]
+    );
+    return result.affectedRows;
+  }
 }
-
-
 
 
 module.exports = {
