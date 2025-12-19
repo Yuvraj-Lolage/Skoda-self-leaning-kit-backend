@@ -26,7 +26,38 @@ const getSubModuleFromModuleById = async (req, res) => {
     }
 }
 
+const getSubmodulesInModule = async (req,res) => {
+    const module_id = req.params.moduleId;
+    try {
+        const submodules = await SubModule.getSubMoudulesInModule(module_id);
+        if(!submodules){
+            res.status(404).json({message: "No submodules found"});
+        }
+        res.json(submodules);
+    } catch (error) {
+        res.status(500).json({message: "Internal server error"});
+    }
+}
+
+const createSubModule = async (req,res) => {
+    try {
+        const user_role = req.user.role;
+        if(user_role !== 'Admin'){
+            return res.status(403).json({message: "Forbidden. Admins only."});
+        }
+        else{
+            const submoduleData = req.body;
+        res.status(201).json({message: "Submodule Created", data: submoduleData, user:user_role});
+        }
+        
+    } catch (error) {
+        res.status(500).json({message: "Internal server error", error: error.message});
+    }
+}
+
 module.exports = {
     getSubModuleWithId,
-    getSubModuleFromModuleById
+    getSubModuleFromModuleById,
+    getSubmodulesInModule,
+    createSubModule
 }
