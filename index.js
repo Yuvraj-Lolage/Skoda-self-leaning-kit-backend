@@ -22,7 +22,7 @@ app.use('/assessment', AssessmentRouter);
 
 //shared folder setup
 const sharedFolder = "/Users/yuvrajsatishlolage/Projects/Skoda_project/Skoda-self-leaning-kit-backend/network_shared_folder"
-app.use("/videos", express.static(sharedFolder));
+app.use("/", express.static(sharedFolder));
 
 
 

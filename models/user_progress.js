@@ -81,37 +81,56 @@ class UserProgress {
     // ➤ Get all progress records for a user
     static async getAllByUser(userId) {
         const query = `
-      SELECT 
-        id,
-        user_id,
-        module_id,
-        completed_submodules,
-        current_submodule_id,
-        next_submodule_id,
-        last_accessed,
-        created_at,
-        updated_at
-      FROM user_progress
-      WHERE user_id = 2;
-    `;
+    SELECT 
+      id,
+      user_id,
+      module_id,
+      completed_submodules,
+      current_submodule_id,
+      next_submodule_id,
+      last_accessed,
+      created_at,
+      updated_at
+    FROM user_progress
+    WHERE user_id = 2;
+  `;
 
         try {
-            const [rows] = await db.query(query);
+            const [rows] = await db.query(query, [userId]);
 
-            // Safely parse JSON field (completed_submodules)
-            return rows.map(row => ({
-                id: row.id,
-                user_id: row.user_id,
-                module_id: row.module_id,
-                completed_submodules: row.completed_submodules
-                    ? JSON.parse(row.completed_submodules)
-                    : [],
-                current_submodule_id: row.current_submodule_id,
-                next_submodule_id: row.next_submodule_id,
-                last_accessed: row.last_accessed,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            }));
+            return rows.map(row => {
+                let completedSubmodules = [];
+
+                try {
+                    if (Array.isArray(row.completed_submodules)) {
+                        // JSON column already parsed by MySQL driver
+                        completedSubmodules = row.completed_submodules;
+                    } else if (typeof row.completed_submodules === "string") {
+                        // Stringified JSON
+                        completedSubmodules = JSON.parse(row.completed_submodules);
+                    }
+                } catch (parseError) {
+                    console.error(
+                        "Invalid completed_submodules JSON for user_progress id:",
+                        row.id,
+                        row.completed_submodules
+                    );
+                    completedSubmodules = [];
+                }
+
+                return {
+                    id: row.id,
+                    user_id: row.user_id,
+                    module_id: row.module_id,
+                    completed_submodules: completedSubmodules,
+                    current_submodule_id: row.current_submodule_id,
+                    next_submodule_id: row.next_submodule_id,
+                    last_accessed: row.last_accessed,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                };
+            });
+
         } catch (error) {
             console.error("Error in getAllByUser:", error);
             throw error;

@@ -24,6 +24,27 @@ const getModulesWithSubmodules = async (req, res) => {
   }
 };
 
+const getAllModulesWithSubmodulesWithStatusFromMYSQL = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    if (!userId) {
+      return res.status(400).json({ message: "Valid userId is required" });
+    }
+
+    const data = await Modules.getAllModulesWithSubmodulesStatus(userId);
+
+    return res.status(200).json({
+      userId,
+      modules: data
+    });
+
+  } catch (err) {
+    console.error("Error fetching module status:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
+
 const getAllModulesWithSubmodulesWithStatus = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -50,6 +71,7 @@ const getAllModulesWithSubmodulesWithStatus = async (req, res) => {
             submodule_id: row.submodule_id,
             submodule_name: row.submodule_name,
             submodule_description: row.submodule_description,
+            content_type: row.content_type,
             content_url: row.content_url,
             order_index: row.order_index,
             duration: row.duration,
@@ -121,6 +143,7 @@ const getAllModulesWithSubmodulesWithStatus = async (req, res) => {
           submodule_name: row.name,
           submodule_description: row.submodule_description,
           content_url: row.content_url,
+          content_type: row.content_type,
           order_index: row.order_index,
           duration: row.duration,
           created_at: row.created_at,
@@ -380,5 +403,6 @@ module.exports = {
   getAllModulesWithSubmodulesWithStatus,
   getModuleByIdWithSubmodulesWithStatus,
   getAllModules,
-  createModule
+  createModule,
+  getAllModulesWithSubmodulesWithStatusFromMYSQL
 }
