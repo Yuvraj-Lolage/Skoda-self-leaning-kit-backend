@@ -41,5 +41,25 @@ const userLogin = async (req, res) => {
     }
 }
 
+// Add this to your controller file
+const updateXP = async (req, res) => {
+    try {
+        const { xpEarned } = req.body;
+        // The id comes from your authenticationMiddleware which decodes the JWT
+        const userId = req.user.id; 
 
-module.exports = { userSignUp, userLogin };
+        if (xpEarned === undefined) {
+            return res.status(400).json({ message: "XP points are required" });
+        }
+
+        await User.updateXP(userId, xpEarned);
+        return res.status(200).json({ message: "XP updated successfully" });
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+};
+
+// Update your module exports at the bottom
+module.exports = { userSignUp, userLogin, updateXP };
+
+

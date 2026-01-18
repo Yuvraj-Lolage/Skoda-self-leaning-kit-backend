@@ -50,6 +50,17 @@ class User {
     await db.query("DELETE FROM users WHERE id = ?", [this.id]);
     return true;
   }
+
+  // Inside your User model file
+  static async updateXP(userId, xpEarned) {
+        return new Promise((resolve, reject) => {
+            const sql = "UPDATE users SET xp = xp + ? WHERE id = ?";
+            db.query(sql, [xpEarned, userId], (err, result) => {
+                if (err) return reject(err);
+                resolve(result);
+            });
+        });
+    }
 }
 
 module.exports = { User };
