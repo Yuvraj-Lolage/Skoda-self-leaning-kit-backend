@@ -41,12 +41,36 @@ const userLogin = async (req, res) => {
     }
 }
 
+const updateWelcomeVisit = async (req, res) => {
+    try{
+        await User.markWelcomeVisited(req.user.id);
+        return res.status(200).json({ message: "Welcome visit updated successfully" });
+    }catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+}
+
+const getUserById = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const user = await User.findById(userId);
+        if (user) {
+            return res.status(200).json(user);
+        } else {
+            return res.status(404).json({ message: "User not found" });
+        }
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+}
+
+
 // Add this to your controller file
 const updateXP = async (req, res) => {
     try {
         const { xpEarned } = req.body;
         // The id comes from your authenticationMiddleware which decodes the JWT
-        const userId = req.user.id; 
+        const userId = req.user.id;
 
         if (xpEarned === undefined) {
             return res.status(400).json({ message: "XP points are required" });
@@ -60,6 +84,6 @@ const updateXP = async (req, res) => {
 };
 
 // Update your module exports at the bottom
-module.exports = { userSignUp, userLogin, updateXP };
+module.exports = { userSignUp, userLogin, updateXP, getUserById, updateWelcomeVisit };
 
 
