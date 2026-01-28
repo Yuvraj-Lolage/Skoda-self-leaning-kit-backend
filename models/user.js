@@ -12,13 +12,87 @@ class User {
     this.xp = xp;
   }
 
-  static async create(name, email, password) {
-    const [result] = await db.query(
-      "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
-      [name, email, password]
-    );
-    return new User(result.insertId, name, email, password);
+  static async create({ name, email, password, role }) {
+    const connection = await db.getConnection();
+
+    const DEFAULT_TOURS = {
+      training: 0,
+      dashboard: 0,
+      submodule: 0,
+      assessment: 0,
+      adminDashboard: 0
+    };
+
+    try {
+      await connection.beginTransaction();
+
+      // 1️⃣ Insert user
+      const userSql = `
+      INSERT INTO users (
+        name,
+        email,
+        password,
+        role,
+        first_visit_welcome,
+        first_visit_driver,
+        xp,
+        tours
+      )
+      VALUES (?, ?, ?, ?, 0, 0, 0, ?)
+    `;
+
+      const userValues = [
+        name,
+        email,
+        password,
+        role || "User",
+        JSON.stringify(DEFAULT_TOURS)
+      ];
+
+      const [userResult] = await connection.execute(userSql, userValues);
+      const userId = userResult.insertId;
+
+      // 2️⃣ Insert default progress (Module 1, Submodule 1 in progress)
+      const progressSql = `
+      INSERT INTO user_progress (
+        user_id,
+        module_id,
+        completed_modules,
+        completed_submodules,
+        current_submodule_id,
+        next_submodule_id,
+        last_accessed
+      )
+      VALUES (?, 1, NULL, JSON_ARRAY(), 1, 2, NOW())
+    `;
+
+      await connection.execute(progressSql, [userId]);
+
+      // 3️⃣ Commit everything
+      await connection.commit();
+
+      return userId;
+
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
+
+  static async userExists(email) {
+    const sql = `
+    SELECT 1
+    FROM users
+    WHERE email = ?
+    LIMIT 1
+  `;
+
+    const [rows] = await db.execute(sql, [email]);
+    return rows.length > 0;
+  }
+
 
   static async findById(id) {
     const [rows] = await db.query("SELECT * FROM users WHERE id = ?", [id]);

@@ -4,13 +4,38 @@ const { authenticationMiddleware, generateToken } = require('../middlewares/jwt'
 
 const userSignUp = async (req, res) => {
     try {
-        const { name, email, password } = req.body;
-        const user = await User.create(name, email, password);
-        return res.status(201).json(user);
+        const { name, email, password, role } = req.body;
+
+        if (!name || !email || !password) {
+            return res.status(400).json({
+                message: "name, email and password are required"
+            });
+        }
+
+        const exists = await User.userExists(email);
+        if (exists) {
+            return res.status(409).json({
+                message: "User already exists"
+            });
+        }
+
+        const userId = await User.create({
+            name,
+            email,
+            password, // ⚠️ hash later
+            role
+        });
+
+        res.status(201).json({
+            message: "User created successfully",
+            userId
+        });
+
     } catch (error) {
-        return res.status(500).json({ message: error.message })
+        return res.status(500).json({ message: error.message });
     }
-}
+};
+
 
 const userLogin = async (req, res) => {
     try {
@@ -70,25 +95,25 @@ const getToursByUserId = async (req, res) => {
 
 
 const completeTour = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { tourKey } = req.body;
+    try {
+        const userId = req.user.id;
+        const { tourKey } = req.body;
 
-    if (!tourKey) {
-      return res.status(400).json({ message: "tourKey is required" });
+        if (!tourKey) {
+            return res.status(400).json({ message: "tourKey is required" });
+        }
+
+        const tours = await User.getUserToursByUserId(userId);
+
+        tours[tourKey] = 1;
+
+        await User.updateToursByUserId(userId, tours);
+
+        res.json({ message: "Tour marked as completed" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to update tour" });
     }
-
-    const tours = await User.getUserToursByUserId(userId);
-
-    tours[tourKey] = 1;
-
-    await User.updateToursByUserId(userId, tours);
-
-    res.json({ message: "Tour marked as completed" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Failed to update tour" });
-  }
 };
 
 const getUserById = async (req, res) => {

@@ -137,6 +137,52 @@ class UserProgress {
         }
     }
 
+    static async upsertProgress({
+        userId,
+        moduleId,
+        completedSubmodules,
+        currentSubmoduleId,
+        nextSubmoduleId
+    }) {
+        const sql = `
+      INSERT INTO user_progress (
+        user_id,
+        module_id,
+        completed_submodules,
+        current_submodule_id,
+        next_submodule_id,
+        last_accessed,
+        created_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, NOW(), NOW(), NOW())
+      ON DUPLICATE KEY UPDATE
+        completed_submodules = VALUES(completed_submodules),
+        current_submodule_id = VALUES(current_submodule_id),
+        next_submodule_id = VALUES(next_submodule_id),
+        last_accessed = NOW(),
+        updated_at = NOW()
+    `;
+
+        return db.execute(sql, [
+            userId,
+            moduleId,
+            JSON.stringify(completedSubmodules),
+            currentSubmoduleId,
+            nextSubmoduleId || null
+        ]);
+    }
+
+    static async getProgress(userId, moduleId) {
+        const [rows] = await db.execute(
+            `SELECT * FROM user_progress WHERE user_id = ? AND module_id = ?`,
+            [userId, moduleId]
+        );
+        return rows[0];
+    }
+
+
+
     // ➤ Delete progress (optional helper)
     static async delete(userId, moduleId) {
         const [result] = await db.execute(

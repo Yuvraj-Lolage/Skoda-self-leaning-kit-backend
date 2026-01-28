@@ -117,81 +117,190 @@ class Modules {
 
 
   static async getAllModulesWithSubmodulesStatus(userId) {
-    const sql = `
-      SELECT JSON_OBJECT(
-  'total_completed_modules', COALESCE(SUM(t.module_completed), 0),
+    //   const sql = `
+    //     SELECT JSON_OBJECT(
+    // 'total_completed_modules', COALESCE(SUM(t.module_completed), 0),
+    // 'modules',
+    //   JSON_ARRAYAGG(
+    //     JSON_OBJECT(
+    //       'module_id', t.module_id,
+    //       'module_name', t.module_name,
+    //       'module_order_index', t.module_order_index,
+    //       'status', t.module_completed,
+    //       'current_module_id', t.current_module_id,
+    //       'current_submodule_id', t.current_submodule_id,
+    //       'submodules', t.submodules
+    //         )
+    //       )
+    //     ) AS result
+    //     FROM (
+    //       SELECT
+    //         m.module_id,
+    //         m.name AS module_name,
+    //         m.order_index AS module_order_index,
+
+    //         CASE
+    //           WHEN COUNT(sm.submodule_id) = 0 THEN 0
+    //           WHEN COALESCE(JSON_LENGTH(up.completed_submodules), 0) = COUNT(sm.submodule_id)
+    //           THEN 1 ELSE 0
+    //         END AS module_completed,
+
+    //         up.module_id AS current_module_id,
+    //         up.current_submodule_id AS current_submodule_id,
+
+    //         COALESCE(
+    //           JSON_ARRAYAGG(
+    //             CASE
+    //               WHEN sm.submodule_id IS NULL THEN NULL
+    //               ELSE JSON_OBJECT(
+    //                 'submodule_id', sm.submodule_id,
+    //                 'submodule_name', sm.name,
+    //                 'submodule_order_index', sm.order_index,
+    //                 'submodule_status',
+    //                   CASE
+    //                     WHEN JSON_CONTAINS(
+    //                       COALESCE(up.completed_submodules, JSON_ARRAY()),
+    //                       CAST(sm.submodule_id AS JSON),
+    //                       '$'
+    //                     )
+    //                     THEN 1 ELSE 0
+    //                   END
+    //               )
+    //             END
+    //           ),
+    //           JSON_ARRAY()
+    //         ) AS submodules
+
+    //       FROM modules m
+
+    //       LEFT JOIN (
+    //         SELECT *
+    //         FROM submodules
+    //         ORDER BY module_id, order_index
+    //       ) sm ON sm.module_id = m.module_id
+
+    //       LEFT JOIN user_progress up
+    //         ON up.module_id = m.module_id
+    //       AND up.user_id = ?
+
+    //       GROUP BY
+    //         m.module_id, m.name, m.order_index,
+    //         up.completed_submodules,
+    //         up.module_id,
+    //         up.current_submodule_id
+
+    //       ORDER BY m.order_index
+    //     ) t;
+    //   `;
+    const sql =
+      `
+  WITH module_base AS (
+  SELECT
+    m.module_id,
+    m.name AS module_name,
+    m.order_index AS module_order_index,
+    up.user_id,
+    up.current_submodule_id,
+    up.completed_submodules,
+
+    COUNT(sm.submodule_id) AS total_submodules,
+    COALESCE(JSON_LENGTH(up.completed_submodules), 0) AS completed_count,
+
+    JSON_ARRAYAGG(
+      JSON_OBJECT(
+        'submodule_id', sm.submodule_id,
+        'submodule_name', sm.name,
+        'submodule_order_index', sm.order_index,
+
+        -- 🔹 Submodule status
+        'submodule_status',
+        CASE
+          WHEN JSON_CONTAINS(
+            COALESCE(up.completed_submodules, JSON_ARRAY()),
+            CAST(sm.submodule_id AS JSON),
+            '$'
+          ) THEN 2
+          WHEN sm.submodule_id = (
+            SELECT sm2.submodule_id
+            FROM submodules sm2
+            WHERE sm2.module_id = m.module_id
+              AND NOT JSON_CONTAINS(
+                COALESCE(up.completed_submodules, JSON_ARRAY()),
+                CAST(sm2.submodule_id AS JSON),
+                '$'
+              )
+            ORDER BY sm2.order_index
+            LIMIT 1
+          ) THEN 1
+          ELSE 0
+        END
+      )
+    ) AS submodules
+
+  FROM modules m
+  LEFT JOIN submodules sm ON sm.module_id = m.module_id
+  LEFT JOIN user_progress up
+    ON up.module_id = m.module_id
+   AND up.user_id = ?
+
+  GROUP BY
+    m.module_id,
+    m.name,
+    m.order_index,
+    up.user_id,
+    up.current_submodule_id,
+    up.completed_submodules
+),
+
+module_status_ranked AS (
+  SELECT
+    *,
+    CASE
+  WHEN total_submodules = 0 THEN 0          -- 🚫 no submodules → LOCKED
+  WHEN completed_count = total_submodules THEN 2
+  ELSE 0
+END AS raw_module_status
+
+  FROM module_base
+),
+
+final_modules AS (
+  SELECT
+    *,
+    CASE
+      WHEN raw_module_status = 2 THEN 2
+      WHEN ROW_NUMBER() OVER (
+        ORDER BY module_order_index
+      ) = (
+        SELECT MIN(module_order_index)
+        FROM module_status_ranked
+        WHERE raw_module_status = 0
+      ) THEN 1
+      ELSE 0
+    END AS module_status
+  FROM module_status_ranked
+)
+
+SELECT JSON_OBJECT(
+  'total_completed_modules',
+    SUM(module_status = 2),
   'modules',
     JSON_ARRAYAGG(
       JSON_OBJECT(
-        'module_id', t.module_id,
-        'module_name', t.module_name,
-        'module_order_index', t.module_order_index,
-        'status', t.module_completed,
-        'current_module_id', t.current_module_id,
-        'current_submodule_id', t.current_submodule_id,
-        'submodules', t.submodules
-          )
-        )
-      ) AS result
-      FROM (
-        SELECT
-          m.module_id,
-          m.name AS module_name,
-          m.order_index AS module_order_index,
+        'module_id', module_id,
+        'module_name', module_name,
+        'module_order_index', module_order_index,
+        'status', module_status,
+        'current_submodule_id', current_submodule_id,
+        'submodules', submodules
+      )
+    )
+) AS result
+FROM final_modules;
 
-          CASE
-            WHEN COUNT(sm.submodule_id) = 0 THEN 0
-            WHEN COALESCE(JSON_LENGTH(up.completed_submodules), 0) = COUNT(sm.submodule_id)
-            THEN 1 ELSE 0
-          END AS module_completed,
+  `
 
-          up.module_id AS current_module_id,
-          up.current_submodule_id AS current_submodule_id,
 
-          COALESCE(
-            JSON_ARRAYAGG(
-              CASE
-                WHEN sm.submodule_id IS NULL THEN NULL
-                ELSE JSON_OBJECT(
-                  'submodule_id', sm.submodule_id,
-                  'submodule_name', sm.name,
-                  'submodule_order_index', sm.order_index,
-                  'submodule_status',
-                    CASE
-                      WHEN JSON_CONTAINS(
-                        COALESCE(up.completed_submodules, JSON_ARRAY()),
-                        CAST(sm.submodule_id AS JSON),
-                        '$'
-                      )
-                      THEN 1 ELSE 0
-                    END
-                )
-              END
-            ),
-            JSON_ARRAY()
-          ) AS submodules
-
-        FROM modules m
-
-        LEFT JOIN (
-          SELECT *
-          FROM submodules
-          ORDER BY module_id, order_index
-        ) sm ON sm.module_id = m.module_id
-
-        LEFT JOIN user_progress up
-          ON up.module_id = m.module_id
-        AND up.user_id = ?
-
-        GROUP BY
-          m.module_id, m.name, m.order_index,
-          up.completed_submodules,
-          up.module_id,
-          up.current_submodule_id
-
-        ORDER BY m.order_index
-      ) t;
-    `;
 
     const [rows] = await db.execute(sql, [userId]);
 
