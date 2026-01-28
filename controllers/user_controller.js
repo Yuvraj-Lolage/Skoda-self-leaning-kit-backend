@@ -64,6 +64,14 @@ const getUserById = async (req, res) => {
     }
 }
 
+const getAllUsers = async (req, res) => {
+    try {
+        const users = await User.findAll();
+        return res.status(200).json(users);
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+}
 
 // Add this to your controller file
 const updateXP = async (req, res) => {
@@ -84,6 +92,6 @@ const updateXP = async (req, res) => {
 };
 
 // Update your module exports at the bottom
-module.exports = { userSignUp, userLogin, updateXP, getUserById, updateWelcomeVisit };
+module.exports = { userSignUp, userLogin, updateXP, getUserById, updateWelcomeVisit, getAllUsers };
 
 

@@ -30,13 +30,13 @@ class User {
   static async findByEmail(email) {
     const [rows] = await db.query("SELECT * FROM users WHERE email = ?", [email]);
     if (rows.length === 0) return null;
-    const { id, name, email: userEmail, password, role, first_visit_welcome, first_visit_driver } = rows[0];
-    return new User(id, name, userEmail, password, role, first_visit_welcome, first_visit_driver);
+    const { id, name, email: userEmail, password, role, first_visit_welcome, first_visit_driver, xp } = rows[0];
+    return new User(id, name, userEmail, password, role, first_visit_welcome, first_visit_driver, xp);
   }
 
   static async findAll() {
     const [rows] = await db.query("SELECT * FROM users");
-    return rows.map((row) => new User(row.id, row.name, row.email, row.password, first_visit_welcome, first_visit_driver));
+    return rows.map((row) => new User(row.id, row.name, row.email, row.password, row.role, row.first_visit_welcome, row.first_visit_driver, row.xp));
   }
 
   async update() {
