@@ -42,13 +42,54 @@ const userLogin = async (req, res) => {
 }
 
 const updateWelcomeVisit = async (req, res) => {
-    try{
+    try {
         await User.markWelcomeVisited(req.user.id);
         return res.status(200).json({ message: "Welcome visit updated successfully" });
-    }catch (error) {
+    } catch (error) {
         return res.status(500).json({ message: error.message });
     }
 }
+
+
+const getToursByUserId = async (req, res) => {
+    try {
+        const userId = req.user.id;
+
+        const tours = await User.getUserToursByUserId(userId);
+
+        if (!tours) {
+            return res.status(404).json({ message: "Tours not found" });
+        }
+
+        res.json(tours);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to fetch tours" });
+    }
+}
+
+
+const completeTour = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { tourKey } = req.body;
+
+    if (!tourKey) {
+      return res.status(400).json({ message: "tourKey is required" });
+    }
+
+    const tours = await User.getUserToursByUserId(userId);
+
+    tours[tourKey] = 1;
+
+    await User.updateToursByUserId(userId, tours);
+
+    res.json({ message: "Tour marked as completed" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to update tour" });
+  }
+};
 
 const getUserById = async (req, res) => {
     try {
@@ -92,6 +133,6 @@ const updateXP = async (req, res) => {
 };
 
 // Update your module exports at the bottom
-module.exports = { userSignUp, userLogin, updateXP, getUserById, updateWelcomeVisit, getAllUsers };
+module.exports = { userSignUp, userLogin, updateXP, getUserById, updateWelcomeVisit, getToursByUserId, completeTour, getAllUsers };
 
 

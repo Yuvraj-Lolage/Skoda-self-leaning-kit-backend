@@ -62,6 +62,31 @@ class User {
     }
   }
 
+  static async getUserToursByUserId(userId) {
+    try {
+      const [rows] = await db.query(
+        "SELECT tours FROM users WHERE id = ?",
+        [userId]
+      );
+      return rows[0]?.tours;
+    } catch (error) {
+      console.error("Failed to update welcome visit flag:", error);
+      throw new Error("Unable to mark welcome screen as visited");
+    }
+  }
+
+  static async updateToursByUserId(userId, tours) {
+    try {
+      await db.query(
+        "UPDATE users SET tours = ? WHERE id = ?",
+        [JSON.stringify(tours), userId]
+      );
+      return true;
+    } catch (error) {
+      console.error("Failed to update welcome visit flag:", error);
+      throw new Error("Unable to mark welcome screen as visited");
+    }
+  }
   async delete() {
     await db.query("DELETE FROM users WHERE id = ?", [this.id]);
     return true;
