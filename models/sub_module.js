@@ -1,12 +1,19 @@
 const db = require("../config/db");
 
 class SubModule {
-  static async getSubModuleWithId(id) {
-    const [rows] = await db.query(`select * from submodules where submodule_id = 1;`);
+  static async getSubModuleWithId(submoduleId) {
+    const sql = `
+    SELECT *
+    FROM submodules
+    WHERE submodule_id = ?
+    LIMIT 1
+  `;
 
-    const modulesMap = {};
-    return rows[0];
-  };
+    const [rows] = await db.execute(sql, [submoduleId]);
+
+    return rows.length > 0 ? rows[0] : null;
+  }
+
 
   static async getSubModuleInModuleWithId(moduleId, submoduleId) {
     const [rows] = await db.query(`select * from submodules where module_id = ${moduleId} and  submodule_id = ${submoduleId};`);
@@ -19,8 +26,8 @@ class SubModule {
   };
 
   static async shiftSubmoduleContentUrls(moduleId, fromIndex) {
-  const [rows] = await db.query(
-    `
+    const [rows] = await db.query(
+      `
     SELECT submodule_id, order_index, content_url
     FROM submodules
     WHERE module_id = ?
@@ -28,31 +35,31 @@ class SubModule {
       AND content_url IS NOT NULL
     ORDER BY order_index DESC
     `,
-    [moduleId, fromIndex]
-  );
-
-  for (const row of rows) {
-    if (!row.content_url) continue;
-
-    const oldIndex = row.order_index;
-    const newIndex = oldIndex + 1;
-
-    // ✅ FIX 2: safe, strict replace
-    const updatedUrl = row.content_url.replace(
-      new RegExp(`(/submodule_)${oldIndex}(/)`, "i"),
-      `$1${newIndex}$2`
+      [moduleId, fromIndex]
     );
 
-    await db.query(
-      `
+    for (const row of rows) {
+      if (!row.content_url) continue;
+
+      const oldIndex = row.order_index;
+      const newIndex = oldIndex + 1;
+
+      // ✅ FIX 2: safe, strict replace
+      const updatedUrl = row.content_url.replace(
+        new RegExp(`(/submodule_)${oldIndex}(/)`, "i"),
+        `$1${newIndex}$2`
+      );
+
+      await db.query(
+        `
       UPDATE submodules
       SET content_url = ?
       WHERE submodule_id = ?
       `,
-      [updatedUrl, row.submodule_id]
-    );
+        [updatedUrl, row.submodule_id]
+      );
+    }
   }
-}
 
 
 
@@ -100,6 +107,40 @@ class SubModule {
     );
     return result.affectedRows;
   }
+
+  static async getFirstByOrder(moduleId) {
+    const sql = `
+    SELECT *
+    FROM submodules
+    WHERE module_id = ?
+    ORDER BY order_index ASC
+    LIMIT 1
+  `;
+
+    const [rows] = await db.execute(sql, [moduleId]);
+
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+
+  static async getNextByOrder(moduleId, currentOrderIndex) {
+    const sql = `
+    SELECT *
+    FROM submodules
+    WHERE module_id = ?
+      AND order_index > ?
+    ORDER BY order_index ASC
+    LIMIT 1
+  `;
+
+    const [rows] = await db.execute(sql, [
+      moduleId,
+      currentOrderIndex
+    ]);
+
+    return rows.length > 0 ? rows[0] : null;
+  }
+
 }
 
 

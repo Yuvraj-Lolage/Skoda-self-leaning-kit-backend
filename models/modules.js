@@ -404,6 +404,22 @@ FROM final_modules;
     );
     return rows[0];
   }
+
+
+  static async getNextByOrder(currentOrderIndex) {
+    const sql = `
+    SELECT *
+    FROM modules
+    WHERE order_index > ?
+    ORDER BY order_index ASC
+    LIMIT 1
+  `;
+
+    const [rows] = await db.execute(sql, [currentOrderIndex]);
+
+    return rows.length > 0 ? rows[0] : null;
+  }
+
 }
 
 

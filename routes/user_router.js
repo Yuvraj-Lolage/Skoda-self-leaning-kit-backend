@@ -7,7 +7,7 @@ userRouter.post('/signup', userSignUp);
 userRouter.post('/login', userLogin);
 userRouter.post('/update-xp', authenticationMiddleware, updateXP); 
 userRouter.get('/me', authenticationMiddleware, getUserById );
-userRouter.get('/', getAllUsers);
+userRouter.get('/all', authenticationMiddleware ,getAllUsers);
 userRouter.put('/update-welcome-visit', authenticationMiddleware, updateWelcomeVisit)
 
 userRouter.get("/tours", authenticationMiddleware, getToursByUserId);

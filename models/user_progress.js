@@ -16,26 +16,29 @@ class UserProgress {
     // ➤ Create a new progress record
     static async create(progressData) {
         const sql = `
-      INSERT INTO user_progress 
-      (user_id, module_id, completed_submodules, current_submodule_id, next_submodule_id, last_accessed)
-      VALUES (?, ?, ?, ?, ?, NOW())
-      ON DUPLICATE KEY UPDATE
-        completed_submodules = VALUES(completed_submodules),
-        current_submodule_id = VALUES(current_submodule_id),
-        next_submodule_id = VALUES(next_submodule_id),
-        last_accessed = NOW(),
-        updated_at = NOW()
-    `;
+    INSERT INTO user_progress 
+    (user_id, module_id, completed_submodules, current_submodule_id, next_submodule_id, last_accessed)
+    VALUES (?, ?, ?, ?, ?, NOW())
+    ON DUPLICATE KEY UPDATE
+      completed_submodules = VALUES(completed_submodules),
+      current_submodule_id = VALUES(current_submodule_id),
+      next_submodule_id = VALUES(next_submodule_id),
+      last_accessed = NOW(),
+      updated_at = NOW()
+  `;
+
         const values = [
-            progressData.user_id,
-            progressData.module_id,
-            JSON.stringify(progressData.completed_submodules || []),
-            progressData.current_submodule_id || null,
-            progressData.next_submodule_id || null,
+            progressData.userId,
+            progressData.moduleId,
+            JSON.stringify(progressData.completedSubmodules || []),
+            progressData.currentSubmoduleId || null,
+            progressData.nextSubmoduleId || null,
         ];
+
         const [result] = await db.execute(sql, values);
         return result;
     }
+
 
     // ➤ Get progress by user and module
     static async getByUserAndModule(userId, moduleId) {
