@@ -16,26 +16,29 @@ class UserProgress {
     // ➤ Create a new progress record
     static async create(progressData) {
         const sql = `
-      INSERT INTO user_progress 
-      (user_id, module_id, completed_submodules, current_submodule_id, next_submodule_id, last_accessed)
-      VALUES (?, ?, ?, ?, ?, NOW())
-      ON DUPLICATE KEY UPDATE
-        completed_submodules = VALUES(completed_submodules),
-        current_submodule_id = VALUES(current_submodule_id),
-        next_submodule_id = VALUES(next_submodule_id),
-        last_accessed = NOW(),
-        updated_at = NOW()
-    `;
+    INSERT INTO user_progress 
+    (user_id, module_id, completed_submodules, current_submodule_id, next_submodule_id, last_accessed)
+    VALUES (?, ?, ?, ?, ?, NOW())
+    ON DUPLICATE KEY UPDATE
+      completed_submodules = VALUES(completed_submodules),
+      current_submodule_id = VALUES(current_submodule_id),
+      next_submodule_id = VALUES(next_submodule_id),
+      last_accessed = NOW(),
+      updated_at = NOW()
+  `;
+
         const values = [
-            progressData.user_id,
-            progressData.module_id,
-            JSON.stringify(progressData.completed_submodules || []),
-            progressData.current_submodule_id || null,
-            progressData.next_submodule_id || null,
+            progressData.userId,
+            progressData.moduleId,
+            JSON.stringify(progressData.completedSubmodules || []),
+            progressData.currentSubmoduleId || null,
+            progressData.nextSubmoduleId || null,
         ];
+
         const [result] = await db.execute(sql, values);
         return result;
     }
+
 
     // ➤ Get progress by user and module
     static async getByUserAndModule(userId, moduleId) {
@@ -81,8 +84,71 @@ class UserProgress {
     // ➤ Get all progress records for a user
     static async getAllByUser(userId) {
         const query = `
-      SELECT 
-        id,
+    SELECT 
+      id,
+      user_id,
+      module_id,
+      completed_submodules,
+      current_submodule_id,
+      next_submodule_id,
+      last_accessed,
+      created_at,
+      updated_at
+    FROM user_progress
+    WHERE user_id = 2;
+  `;
+
+        try {
+            const [rows] = await db.query(query, [userId]);
+
+            return rows.map(row => {
+                let completedSubmodules = [];
+
+                try {
+                    if (Array.isArray(row.completed_submodules)) {
+                        // JSON column already parsed by MySQL driver
+                        completedSubmodules = row.completed_submodules;
+                    } else if (typeof row.completed_submodules === "string") {
+                        // Stringified JSON
+                        completedSubmodules = JSON.parse(row.completed_submodules);
+                    }
+                } catch (parseError) {
+                    console.error(
+                        "Invalid completed_submodules JSON for user_progress id:",
+                        row.id,
+                        row.completed_submodules
+                    );
+                    completedSubmodules = [];
+                }
+
+                return {
+                    id: row.id,
+                    user_id: row.user_id,
+                    module_id: row.module_id,
+                    completed_submodules: completedSubmodules,
+                    current_submodule_id: row.current_submodule_id,
+                    next_submodule_id: row.next_submodule_id,
+                    last_accessed: row.last_accessed,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                };
+            });
+
+        } catch (error) {
+            console.error("Error in getAllByUser:", error);
+            throw error;
+        }
+    }
+
+    static async upsertProgress({
+        userId,
+        moduleId,
+        completedSubmodules,
+        currentSubmoduleId,
+        nextSubmoduleId
+    }) {
+        const sql = `
+      INSERT INTO user_progress (
         user_id,
         module_id,
         completed_submodules,
@@ -91,32 +157,34 @@ class UserProgress {
         last_accessed,
         created_at,
         updated_at
-      FROM user_progress
-      WHERE user_id = 2;
+      )
+      VALUES (?, ?, ?, ?, ?, NOW(), NOW(), NOW())
+      ON DUPLICATE KEY UPDATE
+        completed_submodules = VALUES(completed_submodules),
+        current_submodule_id = VALUES(current_submodule_id),
+        next_submodule_id = VALUES(next_submodule_id),
+        last_accessed = NOW(),
+        updated_at = NOW()
     `;
 
-        try {
-            const [rows] = await db.query(query);
-
-            // Safely parse JSON field (completed_submodules)
-            return rows.map(row => ({
-                id: row.id,
-                user_id: row.user_id,
-                module_id: row.module_id,
-                completed_submodules: row.completed_submodules
-                    ? JSON.parse(row.completed_submodules)
-                    : [],
-                current_submodule_id: row.current_submodule_id,
-                next_submodule_id: row.next_submodule_id,
-                last_accessed: row.last_accessed,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
-            }));
-        } catch (error) {
-            console.error("Error in getAllByUser:", error);
-            throw error;
-        }
+        return db.execute(sql, [
+            userId,
+            moduleId,
+            JSON.stringify(completedSubmodules),
+            currentSubmoduleId,
+            nextSubmoduleId || null
+        ]);
     }
+
+    static async getProgress(userId, moduleId) {
+        const [rows] = await db.execute(
+            `SELECT * FROM user_progress WHERE user_id = ? AND module_id = ?`,
+            [userId, moduleId]
+        );
+        return rows[0];
+    }
+
+
 
     // ➤ Delete progress (optional helper)
     static async delete(userId, moduleId) {

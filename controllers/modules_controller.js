@@ -1,5 +1,8 @@
 const { Modules } = require('../models/modules');
 const { UserProgress } = require('../models/user_progress');
+const fs = require("fs");
+const path = require("path");
+
 
 const getAllModules = async (req, res) => {
   try {
@@ -11,6 +14,7 @@ const getAllModules = async (req, res) => {
   }
 }
 
+
 const getModulesWithSubmodules = async (req, res) => {
   try {
     const modules = await Modules.getAllModulesWithSubmodules();
@@ -20,6 +24,27 @@ const getModulesWithSubmodules = async (req, res) => {
     res.status(500).json({ error: "Internal server error" });
   }
 };
+
+const getAllModulesWithSubmodulesWithStatusFromMYSQL = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    if (!userId) {
+      return res.status(400).json({ message: "Valid userId is required" });
+    }
+
+    const data = await Modules.getAllModulesWithSubmodulesStatus(userId);
+
+    return res.status(200).json({
+      userId,
+      modules: data
+    });
+
+  } catch (err) {
+    console.error("Error fetching module status:", err);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
 
 const getAllModulesWithSubmodulesWithStatus = async (req, res) => {
   try {
@@ -47,6 +72,7 @@ const getAllModulesWithSubmodulesWithStatus = async (req, res) => {
             submodule_id: row.submodule_id,
             submodule_name: row.submodule_name,
             submodule_description: row.submodule_description,
+            content_type: row.content_type,
             content_url: row.content_url,
             order_index: row.order_index,
             duration: row.duration,
@@ -118,6 +144,7 @@ const getAllModulesWithSubmodulesWithStatus = async (req, res) => {
           submodule_name: row.name,
           submodule_description: row.submodule_description,
           content_url: row.content_url,
+          content_type: row.content_type,
           order_index: row.order_index,
           duration: row.duration,
           created_at: row.created_at,
@@ -277,11 +304,77 @@ const getModuleByIdWithSubmodulesWithStatus = async (req, res) => {
 //   }
 // }
 
+function shiftModuleFolders(insertIndex) {
+  const basePath = process.env.SHARED_FOLDER;
+
+  // Read all folders inside base path
+  const folders = fs.readdirSync(basePath);
+
+  // Filter only folders like module_1, module_2 etc.
+  const moduleFolders = folders.filter(f => /^module_\d+$/.test(f));
+
+  // Extract module numbers and sort descending
+  const folderNumbers = moduleFolders
+    .map(f => parseInt(f.split("_")[1]))
+    .filter(num => num >= insertIndex)
+    .sort((a, b) => b - a);
+
+  // Rename each folder safely (descending order → no overwrite)
+  folderNumbers.forEach(num => {
+    const oldPath = path.join(basePath, `module_${num}`);
+    const newPath = path.join(basePath, `module_${num + 1}`);
+    if (fs.existsSync(oldPath)) {
+      fs.renameSync(oldPath, newPath);
+    }
+  });
+}
+
+
+
+
 const createModule = async (req, res) => {
   try {
     const { module_name, module_description, order_index, duration } = req.body;
 
-    // 1️⃣ Create module in DB
+    // Get current highest module index
+    const max_order_index = await Modules.getMaxOrderIndex();
+
+    // ========================= ADD AT END ============================
+    if (max_order_index + 1 == order_index) {
+
+      // Create module in database
+      const newModule = await Modules.createModule({
+        module_name,
+        module_description,
+        order_index,
+        duration
+      });
+
+      // Create folder for this module
+      const folderPath = path.join(process.env.SHARED_FOLDER, `module_${order_index}`);
+      if (!fs.existsSync(folderPath)) {
+        fs.mkdirSync(folderPath, { recursive: true });
+      }
+
+      return res.status(201).json({
+        message: "Module created successfully",
+        module: newModule
+      });
+    }
+
+    // ====================== INSERT IN BETWEEN ========================
+
+    // 1️⃣ Shift order indexes in DB
+    await Modules.shiftModuleOrders(order_index);
+
+    // 2️⃣ Shift folders (descending rename)
+    shiftModuleFolders(order_index);
+
+    // 3️⃣ Create folder for new module index AFTER shifts
+    const newFolderPath = path.join(process.env.SHARED_FOLDER, `module_${order_index}`);
+    fs.mkdirSync(newFolderPath, { recursive: true });
+
+    // 4️⃣ Create module row in DB
     const newModule = await Modules.createModule({
       module_name,
       module_description,
@@ -289,30 +382,17 @@ const createModule = async (req, res) => {
       duration
     });
 
-    // 2️⃣ Build folder path using order_index
-    const folderPath = path.join(SHARED_BASE, `module_${order_index}`);
-
-    // 3️⃣ Create folder if not exists
-    try {
-      if (!fs.existsSync(folderPath)) {
-        fs.mkdirSync(folderPath, { recursive: true });
-      }
-    } catch (folderErr) {
-      console.error("Error creating folder:", folderErr);
-      // Continue without failing module creation
-    }
-
-    // 4️⃣ Add folder path to response
-    newModule.folder_path = folderPath;
-
-    // 5️⃣ Send final response
-    res.status(201).json(newModule);
+    return res.status(201).json({
+      message: "Module inserted successfully",
+      module: newModule
+    });
 
   } catch (err) {
     console.error("Error creating module:", err);
-    res.status(500).json({ error: "Internal server error" });
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
+
 
 
 
@@ -324,5 +404,6 @@ module.exports = {
   getAllModulesWithSubmodulesWithStatus,
   getModuleByIdWithSubmodulesWithStatus,
   getAllModules,
-  createModule
+  createModule,
+  getAllModulesWithSubmodulesWithStatusFromMYSQL
 }
