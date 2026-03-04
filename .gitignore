@@ -2,3 +2,9 @@
 network_shared_folder/
 *.mp4
 network_shared_folder/
+
+node_modules/
+.env
+dist/
+build/
+logs/
