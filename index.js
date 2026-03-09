@@ -34,6 +34,11 @@ const sharedFolder =
 
 app.use("/", express.static(sharedFolder));
 
+//===================== API health =====================
+
+app.get("/", (req, res) => {
+  res.status(200).json({ status: "OK", message: "API is healthy" });
+});
 // ===================== SERVER =====================
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
