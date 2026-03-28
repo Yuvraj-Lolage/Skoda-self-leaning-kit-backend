@@ -182,29 +182,16 @@ class AssessmentResult {
     return rows;
   }
 
-  /** @returns {Set<number>} assessment_ids where the user has at least one PASSED attempt */
-  static async getPassedAssessmentIdSetForUser(userId) {
+  /**
+   * Module / catalog progression: any submitted attempt (pass or fail) completes the step.
+   * @returns {Set<number>}
+   */
+  static async getSubmittedAssessmentIdSetForUser(userId) {
     const [rows] = await db.query(
-      `SELECT assessment_id, attempts FROM assessment_results WHERE user_id = ?`,
+      `SELECT assessment_id FROM assessment_results WHERE user_id = ?`,
       [userId]
     );
-    const passed = new Set();
-    for (const row of rows) {
-      let attempts = row.attempts;
-      if (typeof attempts === "string") {
-        try {
-          attempts = JSON.parse(attempts);
-        } catch {
-          attempts = [];
-        }
-      }
-      if (!Array.isArray(attempts)) continue;
-      const ok = attempts.some(
-        (a) => String(a?.status || "").toUpperCase() === "PASSED"
-      );
-      if (ok) passed.add(Number(row.assessment_id));
-    }
-    return passed;
+    return new Set(rows.map((r) => Number(r.assessment_id)));
   }
 }
 

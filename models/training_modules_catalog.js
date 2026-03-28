@@ -40,24 +40,24 @@ class TrainingModulesCatalog {
     return steps;
   }
 
-  static _isModuleFullyComplete(steps, progressBySubmoduleId, passedAssessmentIds) {
+  static _isModuleFullyComplete(steps, progressBySubmoduleId, submittedAssessmentIds) {
     if (steps.length === 0) return true;
     for (const st of steps) {
       if (st.kind === "submodule") {
         if (progressBySubmoduleId.get(st.submoduleId) !== "completed") return false;
-      } else if (!passedAssessmentIds.has(st.assessmentId)) {
+      } else if (!submittedAssessmentIds.has(st.assessmentId)) {
         return false;
       }
     }
     return true;
   }
 
-  static _firstIncompleteStepIndex(steps, progressBySubmoduleId, passedAssessmentIds) {
+  static _firstIncompleteStepIndex(steps, progressBySubmoduleId, submittedAssessmentIds) {
     for (let i = 0; i < steps.length; i++) {
       const st = steps[i];
       if (st.kind === "submodule") {
         if (progressBySubmoduleId.get(st.submoduleId) !== "completed") return i;
-      } else if (!passedAssessmentIds.has(st.assessmentId)) {
+      } else if (!submittedAssessmentIds.has(st.assessmentId)) {
         return i;
       }
     }
@@ -110,16 +110,15 @@ class TrainingModulesCatalog {
       progressBySubmoduleId.set(Number(row.submodule_id), row.status);
     }
 
-    const passedAssessmentIds = await AssessmentResult.getPassedAssessmentIdSetForUser(
-      userId
-    );
+    const submittedAssessmentIds =
+      await AssessmentResult.getSubmittedAssessmentIdSetForUser(userId);
 
     const totalSteps = steps.length;
     let completedSteps = 0;
     for (const st of steps) {
       if (st.kind === "submodule") {
         if (progressBySubmoduleId.get(st.submoduleId) === "completed") completedSteps += 1;
-      } else if (passedAssessmentIds.has(st.assessmentId)) {
+      } else if (submittedAssessmentIds.has(st.assessmentId)) {
         completedSteps += 1;
       }
     }
@@ -130,7 +129,7 @@ class TrainingModulesCatalog {
     const fi = this._firstIncompleteStepIndex(
       steps,
       progressBySubmoduleId,
-      passedAssessmentIds
+      submittedAssessmentIds
     );
 
     let currentSubmoduleId = null;
@@ -224,8 +223,8 @@ class TrainingModulesCatalog {
       progressBySubmoduleId.set(Number(row.submodule_id), row.status);
     }
 
-    const passedAssessmentIds =
-      await AssessmentResult.getPassedAssessmentIdSetForUser(userId);
+    const submittedAssessmentIds =
+      await AssessmentResult.getSubmittedAssessmentIdSetForUser(userId);
 
     const subsByModuleId = new Map();
     for (const s of submoduleRows) {
@@ -261,7 +260,7 @@ class TrainingModulesCatalog {
       const completed = this._isModuleFullyComplete(
         steps,
         progressBySubmoduleId,
-        passedAssessmentIds
+        submittedAssessmentIds
       );
       return {
         completed,
@@ -306,7 +305,7 @@ class TrainingModulesCatalog {
             : this._firstIncompleteStepIndex(
                 steps,
                 progressBySubmoduleId,
-                passedAssessmentIds
+                submittedAssessmentIds
               );
 
       const submodulesOut = subs.map((s) => {
@@ -328,8 +327,7 @@ class TrainingModulesCatalog {
             else if (stepIdx === fi) aStatus = "in_progress";
             else aStatus = "locked";
           }
-          const passed = passedAssessmentIds.has(aid);
-          if (passed) aStatus = "completed";
+          if (submittedAssessmentIds.has(aid)) aStatus = "completed";
 
           return {
             assessment_id: aid,

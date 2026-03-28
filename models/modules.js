@@ -382,8 +382,10 @@ FROM final_modules;
   }
 
   static async getMaxOrderIndex() {
-    const [rows] = await db.execute(`SELECT MAX(order_index) AS max_order_index FROM modules`);
-    return rows[0].max_order_index || -1;
+    const [rows] = await db.execute(
+      `SELECT COALESCE(MAX(order_index), 0) AS max_order_index FROM modules`
+    );
+    return rows[0].max_order_index;
   }
 
   static async shiftModuleOrders(order_index) {
@@ -394,6 +396,25 @@ FROM final_modules;
       ORDER BY order_index DESC`,
       [order_index]
     );
+    return result.affectedRows;
+  }
+
+  /** Inverse of shiftModuleOrders (used when folder/insert steps fail after a successful shift). */
+  static async unshiftModuleOrders(insert_index) {
+    const [result] = await db.execute(
+      `UPDATE modules
+      SET order_index = order_index - 1
+      WHERE order_index > ?
+      ORDER BY order_index ASC`,
+      [insert_index]
+    );
+    return result.affectedRows;
+  }
+
+  static async deleteModuleById(moduleId) {
+    const [result] = await db.execute(`DELETE FROM modules WHERE module_id = ?`, [
+      moduleId,
+    ]);
     return result.affectedRows;
   }
 

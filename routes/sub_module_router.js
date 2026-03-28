@@ -8,7 +8,11 @@ const SubModuleRouter = express.Router();
 SubModuleRouter.get('/id/:id', getSubModuleWithId)
 SubModuleRouter.get('/by/module/:moduleId/submodule/:submoduleId', authenticationMiddleware ,getSubModuleFromModuleById)
 SubModuleRouter.get('/by/module/:moduleId', authenticationMiddleware ,getSubmodulesInModule)
-SubModuleRouter.post("/create",upload.single("file"),createSubModule);
+SubModuleRouter.post(
+  "/create",
+  authenticationMiddleware,
+  upload.single("file"),
+  createSubModule
+);
 
-SubModuleRouter.post('/create', authenticationMiddleware, createSubModule)
 module.exports = SubModuleRouter;

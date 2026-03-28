@@ -1,46 +1,56 @@
-const { Modules } = require("../models/modules")
+const { Modules } = require("../models/modules");
 const path = require("path");
 const { SubModule } = require("../models/sub_module");
 const fs = require("fs");
-const { log } = require("console");
+
+function publicStaticBaseUrl() {
+  return (
+    process.env.PUBLIC_STATIC_URL ||
+    `http://localhost:${process.env.PORT || 3000}`
+  );
+}
+
 const getSubModuleWithId = async (req, res) => {
   const id = req.params.id;
   try {
     const submodule = await SubModule.getSubModuleWithId(id);
     if (!submodule) {
-      res.status(404).json({ message: "Submodule not found" });
+      return res.status(404).json({ message: "Submodule not found" });
     }
-    res.json(submodule);
+    return res.json(submodule);
   } catch (error) {
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
-}
+};
 
 const getSubModuleFromModuleById = async (req, res) => {
   const { moduleId, submoduleId } = req.params;
   try {
-    const submodule = await SubModule.getSubModuleInModuleWithId(moduleId, submoduleId);
+    const submodule = await SubModule.getSubModuleInModuleWithId(
+      moduleId,
+      submoduleId
+    );
     if (!submodule) {
-      res.status(404).json({ message: "Submodule not found" });
+      return res.status(404).json({ message: "Submodule not found" });
     }
-    res.json(submodule);
+    return res.json(submodule);
   } catch (error) {
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
-}
+};
 
 const getSubmodulesInModule = async (req, res) => {
   const module_id = req.params.moduleId;
   try {
     const submodules = await SubModule.getSubMoudulesInModule(module_id);
-    if (!submodules) {
-      res.status(404).json({ message: "No submodules found" });
+    if (!Array.isArray(submodules)) {
+      return res.status(404).json({ message: "No submodules found" });
     }
-    res.json(submodules);
+    return res.json(submodules);
   } catch (error) {
-    res.status(500).json({ message: "Internal server error" });
+    return res.status(500).json({ message: "Internal server error" });
   }
-}
+};
 
 
 // const shiftSubmoduleFolders = (sharedBasePath, moduleOrder, fromIndex) => {
@@ -264,35 +274,80 @@ const getSubmodulesInModule = async (req, res) => {
 // };
 
 
-const shiftSubmoduleFolders = async (moduleOrder, fromIndex) => {
-  const SHARED_BASE_PATH = process.env.SHARED_FOLDER;
+function assertSharedFolderReady() {
+  const base = process.env.SHARED_FOLDER;
+  if (!base || !fs.existsSync(base)) {
+    throw new Error("SHARED_FOLDER is not configured or does not exist");
+  }
+  return base;
+}
 
-  // Path to the module directory
-  const modulePath = path.join(
-    SHARED_BASE_PATH,
-    `module_${moduleOrder}`
-  )
+function shiftSubmoduleFolders(moduleOrder, fromIndex) {
+  const SHARED_BASE_PATH = assertSharedFolderReady();
+  const modulePath = path.join(SHARED_BASE_PATH, `module_${moduleOrder}`);
 
   if (!fs.existsSync(modulePath)) {
     return;
   }
 
-  const folders = fs.readdirSync(modulePath);
-
-  const submoduleFolders = folders.filter(f => /^submodule_\d+$/.test(f));
-
-  const folderNumbers = submoduleFolders
-    .map(f => parseInt(f.split("_")[1], 10))
-    .filter(num => num >= fromIndex)
+  const folderNumbers = fs
+    .readdirSync(modulePath)
+    .filter((f) => /^submodule_\d+$/.test(f))
+    .map((f) => parseInt(f.split("_")[1], 10))
+    .filter((num) => num >= fromIndex)
     .sort((a, b) => b - a);
 
-  folderNumbers.forEach(num => {
-    const oldPath = path.join(modulePath, `submodule_${num}`);
-    const newPath = path.join(modulePath, `submodule_${num + 1}`);
-    if (fs.existsSync(oldPath)) {
-      fs.renameSync(oldPath, newPath);
+  const completedNums = [];
+  try {
+    for (const num of folderNumbers) {
+      const oldPath = path.join(modulePath, `submodule_${num}`);
+      const newPath = path.join(modulePath, `submodule_${num + 1}`);
+      if (fs.existsSync(oldPath)) {
+        fs.renameSync(oldPath, newPath);
+        completedNums.push(num);
+      }
     }
-  })
+  } catch (err) {
+    for (const num of [...completedNums].reverse()) {
+      const from = path.join(modulePath, `submodule_${num + 1}`);
+      const to = path.join(modulePath, `submodule_${num}`);
+      try {
+        if (fs.existsSync(from)) fs.renameSync(from, to);
+      } catch (_) {}
+    }
+    throw err;
+  }
+}
+
+function unshiftSubmoduleFolders(moduleOrder, insertIndex) {
+  const base = process.env.SHARED_FOLDER;
+  if (!base || !fs.existsSync(base)) return;
+  const modulePath = path.join(base, `module_${moduleOrder}`);
+  if (!fs.existsSync(modulePath)) return;
+
+  const folderNumbers = fs
+    .readdirSync(modulePath)
+    .filter((f) => /^submodule_\d+$/.test(f))
+    .map((f) => parseInt(f.split("_")[1], 10))
+    .filter((num) => num > insertIndex)
+    .sort((a, b) => a - b);
+
+  for (const num of folderNumbers) {
+    const from = path.join(modulePath, `submodule_${num}`);
+    const to = path.join(modulePath, `submodule_${num - 1}`);
+    if (fs.existsSync(from)) {
+      fs.renameSync(from, to);
+    }
+  }
+}
+
+function removeSubmoduleSlotFolder(moduleOrder, orderIndex) {
+  const base = process.env.SHARED_FOLDER;
+  if (!base) return;
+  const folderPath = path.join(base, `module_${moduleOrder}`, `submodule_${orderIndex}`);
+  if (fs.existsSync(folderPath)) {
+    fs.rmSync(folderPath, { recursive: true, force: true });
+  }
 }
 
 
@@ -300,15 +355,15 @@ const shiftSubmoduleFolders = async (moduleOrder, fromIndex) => {
 
 
 const createSubModule = async (req, res) => {
-  const SHARED_BASE_PATH = process.env.SHARED_FOLDER;
-
   try {
-    const {
-      module_id,
-      submodule_name,
-      submodule_description,
-      order_index
-    } = req.body;
+    assertSharedFolderReady();
+
+    const module_id = parseInt(String(req.body.module_id), 10);
+    const order_index = parseInt(String(req.body.order_index), 10);
+    const submodule_name = String(req.body.submodule_name ?? "").trim();
+    const submodule_description = String(
+      req.body.submodule_description ?? ""
+    ).trim();
 
     const fileType = req.headers["x-file-type"];
 
@@ -320,7 +375,16 @@ const createSubModule = async (req, res) => {
       return res.status(400).json({ message: "File is required" });
     }
 
-    // 1️⃣ Get module
+    if (!submodule_name || !submodule_description) {
+      return res.status(400).json({
+        message: "Submodule name and description are required",
+      });
+    }
+
+    if (!Number.isFinite(module_id) || !Number.isFinite(order_index)) {
+      return res.status(400).json({ message: "Invalid module_id or order_index" });
+    }
+
     const module = await Modules.getModuleById(module_id);
     if (!module) {
       return res.status(404).json({ message: "Module not found" });
@@ -328,18 +392,17 @@ const createSubModule = async (req, res) => {
 
     const moduleOrder = module.order_index;
 
-    // 2️⃣ Get max submodule order (DB source of truth)
     const maxOrderRaw = await SubModule.getMaxOrderIndex(module_id);
-    const maxOrder = Number.isInteger(maxOrderRaw) ? maxOrderRaw : 0;
+    const maxOrder = Number(maxOrderRaw) || 0;
 
     if (order_index < 1 || order_index > maxOrder + 1) {
       return res.status(400).json({
-        message: `order_index must be between 1 and ${maxOrder + 1}`
+        message: `order_index must be between 1 and ${maxOrder + 1}`,
       });
     }
 
     const modulePath = path.join(
-      SHARED_BASE_PATH,
+      process.env.SHARED_FOLDER,
       `module_${moduleOrder}`
     );
 
@@ -348,11 +411,13 @@ const createSubModule = async (req, res) => {
     }
 
     /**
-     * ======================= ADD AT END ==========================
-     * Includes:
-     * - empty module
-     * - order_index === maxOrder + 1
+     * Order for insert-in-between (keeps disk, URLs, and DB aligned):
+     * 1) Rename submodule_* folders (descending)
+     * 2) Bump /submodule_N/ in content_url while rows still have old order_index
+     * 3) Shift order_index in DB
+     * 4) mkdir, move upload, INSERT
      */
+
     if (order_index === maxOrder + 1) {
       const finalDir = path.join(
         modulePath,
@@ -360,13 +425,76 @@ const createSubModule = async (req, res) => {
         fileType
       );
 
+      try {
+        fs.mkdirSync(finalDir, { recursive: true });
+
+        const finalPath = path.join(finalDir, req.file.filename);
+        await fs.promises.rename(req.file.path, finalPath);
+
+        const base = publicStaticBaseUrl().replace(/\/$/, "");
+        const filePathForDB = `${base}/module_${moduleOrder}/submodule_${order_index}/${fileType}/${req.file.filename}`;
+
+        const submodule = await SubModule.createSubModule({
+          module_id,
+          submodule_name,
+          submodule_description,
+          file_type: fileType,
+          order_index,
+          duration: 0,
+          video_path: filePathForDB,
+        });
+
+        return res.status(201).json({
+          message: "Submodule created at end",
+          data: submodule,
+        });
+      } catch (err) {
+        removeSubmoduleSlotFolder(moduleOrder, order_index);
+        console.error("Add-at-end submodule failed:", err);
+        throw err;
+      }
+    }
+
+    if (maxOrder > 0 && order_index <= maxOrder) {
+      try {
+        shiftSubmoduleFolders(moduleOrder, order_index);
+      } catch (folderErr) {
+        console.error("shiftSubmoduleFolders failed:", folderErr);
+        throw folderErr;
+      }
+
+      try {
+        await SubModule.shiftSubmoduleContentUrls(module_id, order_index);
+      } catch (urlErr) {
+        unshiftSubmoduleFolders(moduleOrder, order_index);
+        console.error("shiftSubmoduleContentUrls failed:", urlErr);
+        throw urlErr;
+      }
+
+      try {
+        await SubModule.shiftSubmoduleOrders(module_id, order_index);
+      } catch (dbErr) {
+        await SubModule.revertSubmoduleUrlBumps(module_id, order_index);
+        unshiftSubmoduleFolders(moduleOrder, order_index);
+        console.error("shiftSubmoduleOrders failed:", dbErr);
+        throw dbErr;
+      }
+    }
+
+    const finalDir = path.join(
+      modulePath,
+      `submodule_${order_index}`,
+      fileType
+    );
+
+    try {
       fs.mkdirSync(finalDir, { recursive: true });
 
       const finalPath = path.join(finalDir, req.file.filename);
       await fs.promises.rename(req.file.path, finalPath);
 
-      const filePathForDB =
-        `http://localhost:3000/module_${moduleOrder}/submodule_${order_index}/${fileType}/${req.file.filename}`;
+      const base = publicStaticBaseUrl().replace(/\/$/, "");
+      const filePathForDB = `${base}/module_${moduleOrder}/submodule_${order_index}/${fileType}/${req.file.filename}`;
 
       const submodule = await SubModule.createSubModule({
         module_id,
@@ -375,77 +503,31 @@ const createSubModule = async (req, res) => {
         file_type: fileType,
         order_index,
         duration: 0,
-        video_path: filePathForDB
+        video_path: filePathForDB,
       });
 
       return res.status(201).json({
-        message: "Submodule created at end",
-        data: submodule
+        message: "Submodule inserted successfully",
+        data: submodule,
       });
+    } catch (tailErr) {
+      removeSubmoduleSlotFolder(moduleOrder, order_index);
+      await SubModule.unshiftSubmoduleOrders(module_id, order_index);
+      await SubModule.revertSubmoduleUrlBumps(module_id, order_index);
+      unshiftSubmoduleFolders(moduleOrder, order_index);
+      console.error("Insert-between final steps failed:", tailErr);
+      throw tailErr;
     }
-
-    /**
-     * ===================== INSERT IN BETWEEN =====================
-     * Only shift when submodules already exist AND insertion is not at end
-     */
-
-    if (maxOrder > 0 && order_index <= maxOrder) {
-      // 1 Shift folders FIRST
-      await shiftSubmoduleFolders(
-        moduleOrder,
-        order_index
-      );
-
-      // 2 shift contents url in DB
-      await SubModule.shiftSubmoduleContentUrls(module_id, order_index);
-
-      // 3 Shift DB order indexes
-      await SubModule.shiftSubmoduleOrders(module_id,order_index);
-    }
-
-    // 5️⃣ Create target folder
-    const finalDir = path.join(
-      modulePath,
-      `submodule_${order_index}`,
-      fileType
-    );
-
-    fs.mkdirSync(finalDir, { recursive: true });
-
-    // // 6️⃣ Move file temp → final
-    const finalPath = path.join(finalDir, req.file.filename);
-    await fs.promises.rename(req.file.path, finalPath);
-
-    const filePathForDB =
-      `http://localhost:3000/module_${moduleOrder}/submodule_${order_index}/${fileType}/${req.file.filename}`;
-
-    // // 7️⃣ Insert DB record
-    const submodule = await SubModule.createSubModule({
-      module_id,
-      submodule_name,
-      submodule_description,
-      file_type: fileType,
-      order_index,
-      duration: 0,
-      video_path: filePathForDB
-    });
-
-    return res.status(201).json({
-      message: "Submodule inserted successfully",
-      // data: submodule
-    });
-
   } catch (error) {
     console.error("Create submodule error:", error);
 
-    // Cleanup temp file
     if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (_) {}
     }
 
-    return res.status(500).json({
-      message: "Internal server error"
-    });
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 

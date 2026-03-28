@@ -34,6 +34,11 @@ app.use("/learning-progress", LearningProgressRouter);
 const sharedFolder =
   "/Users/yuvrajsatishlolage/Projects/Skoda_project/Skoda-self-leaning-kit-backend/network_shared_folder";
 
+process.env.SHARED_FOLDER = process.env.SHARED_FOLDER || sharedFolder;
+process.env.PORT = process.env.PORT || String(PORT);
+process.env.PUBLIC_STATIC_URL =
+  process.env.PUBLIC_STATIC_URL || `http://localhost:${process.env.PORT}`;
+
 app.use("/", express.static(sharedFolder));
 
 //===================== API health =====================
@@ -42,6 +47,7 @@ app.get("/", (req, res) => {
   res.status(200).json({ status: "OK", message: "API is healthy" });
 });
 // ===================== SERVER =====================
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+const listenPort = Number(process.env.PORT) || PORT;
+app.listen(listenPort, () => {
+  console.log(`Server is running on http://localhost:${listenPort}`);
 });

@@ -16,15 +16,22 @@ class SubModule {
 
 
   static async getSubModuleInModuleWithId(moduleId, submoduleId) {
-    const [rows] = await db.query(`select * from submodules where module_id = ${moduleId} and  submodule_id = ${submoduleId};`);
+    const [rows] = await db.execute(
+      `SELECT * FROM submodules WHERE module_id = ? AND submodule_id = ? LIMIT 1`,
+      [moduleId, submoduleId]
+    );
     return rows[0];
-  };
+  }
 
   static async getSubMoudulesInModule(module_id) {
     const [rows] = await db.query(`select * from submodules where module_id = ${module_id} ORDER BY order_index;`);
     return rows;
   };
 
+  /**
+   * After physical folders are renamed submodule_N → submodule_{N+1}, bump the
+   * /submodule_{order}/ segment in content_url to match (before order_index is shifted in DB).
+   */
   static async shiftSubmoduleContentUrls(moduleId, fromIndex) {
     const [rows] = await db.query(
       `
@@ -33,6 +40,7 @@ class SubModule {
     WHERE module_id = ?
       AND order_index >= ?
       AND content_url IS NOT NULL
+      AND content_url != ''
     ORDER BY order_index DESC
     `,
       [moduleId, fromIndex]
@@ -44,10 +52,47 @@ class SubModule {
       const oldIndex = row.order_index;
       const newIndex = oldIndex + 1;
 
-      // ✅ FIX 2: safe, strict replace
       const updatedUrl = row.content_url.replace(
-        new RegExp(`(/submodule_)${oldIndex}(/)`, "i"),
-        `$1${newIndex}$2`
+        new RegExp(`(/submodule_)${oldIndex}(?=/|$)`, "i"),
+        `$1${newIndex}`
+      );
+
+      await db.query(
+        `
+      UPDATE submodules
+      SET content_url = ?
+      WHERE submodule_id = ?
+      `,
+        [updatedUrl, row.submodule_id]
+      );
+    }
+  }
+
+  /**
+   * Rewrites `/submodule_{order_index+1}/` → `/submodule_{order_index}/` in content_url.
+   * Use when undoing a forward URL bump: either after unshiftSubmoduleOrders, or when
+   * shiftSubmoduleOrders failed but URLs were already updated.
+   */
+  static async revertSubmoduleUrlBumps(moduleId, fromIndex) {
+    const [rows] = await db.query(
+      `
+    SELECT submodule_id, order_index, content_url
+    FROM submodules
+    WHERE module_id = ?
+      AND order_index >= ?
+      AND content_url IS NOT NULL
+      AND content_url != ''
+    ORDER BY order_index ASC
+    `,
+      [moduleId, fromIndex]
+    );
+
+    for (const row of rows) {
+      if (!row.content_url) continue;
+
+      const updatedUrl = row.content_url.replace(
+        new RegExp(`(/submodule_)${row.order_index + 1}(?=/|$)`, "i"),
+        `$1${row.order_index}`
       );
 
       await db.query(
@@ -90,20 +135,32 @@ class SubModule {
 
   static async getMaxOrderIndex(module_id) {
     const [rows] = await db.execute(
-      `SELECT MAX(order_index) AS max_order_index
+      `SELECT COALESCE(MAX(order_index), 0) AS max_order_index
        FROM submodules
        WHERE module_id = ?`,
       [module_id]
     );
-    return rows[0].max_order_index || -1;
+    return rows[0].max_order_index;
   }
 
   static async shiftSubmoduleOrders(module_id, order_index) {
     const [result] = await db.execute(
       `UPDATE submodules
        SET order_index = order_index + 1
-       WHERE module_id = ? AND order_index >= ?`,
+       WHERE module_id = ? AND order_index >= ?
+       ORDER BY order_index DESC`,
       [module_id, order_index]
+    );
+    return result.affectedRows;
+  }
+
+  static async unshiftSubmoduleOrders(module_id, insert_index) {
+    const [result] = await db.execute(
+      `UPDATE submodules
+       SET order_index = order_index - 1
+       WHERE module_id = ? AND order_index > ?
+       ORDER BY order_index ASC`,
+      [module_id, insert_index]
     );
     return result.affectedRows;
   }

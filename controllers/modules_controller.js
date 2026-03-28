@@ -304,29 +304,82 @@ const getModuleByIdWithSubmodulesWithStatus = async (req, res) => {
 //   }
 // }
 
-function shiftModuleFolders(insertIndex) {
+function assertSharedFolderReady() {
   const basePath = process.env.SHARED_FOLDER;
+  if (!basePath || !fs.existsSync(basePath)) {
+    throw new Error("SHARED_FOLDER is not configured or does not exist");
+  }
+  return basePath;
+}
 
-  // Read all folders inside base path
-  const folders = fs.readdirSync(basePath);
+/**
+ * Renames module_N → module_{N+1} for N >= insertIndex (descending) so names never collide.
+ * On failure after partial renames, rolls back those renames so disk matches pre-shift state.
+ */
+function shiftModuleFolders(insertIndex) {
+  const basePath = assertSharedFolderReady();
 
-  // Filter only folders like module_1, module_2 etc.
-  const moduleFolders = folders.filter(f => /^module_\d+$/.test(f));
-
-  // Extract module numbers and sort descending
-  const folderNumbers = moduleFolders
-    .map(f => parseInt(f.split("_")[1]))
-    .filter(num => num >= insertIndex)
+  const folderNumbers = fs
+    .readdirSync(basePath)
+    .filter((f) => /^module_\d+$/.test(f))
+    .map((f) => parseInt(f.split("_")[1], 10))
+    .filter((num) => num >= insertIndex)
     .sort((a, b) => b - a);
 
-  // Rename each folder safely (descending order → no overwrite)
-  folderNumbers.forEach(num => {
-    const oldPath = path.join(basePath, `module_${num}`);
-    const newPath = path.join(basePath, `module_${num + 1}`);
-    if (fs.existsSync(oldPath)) {
-      fs.renameSync(oldPath, newPath);
+  const completedNums = [];
+  try {
+    for (const num of folderNumbers) {
+      const oldPath = path.join(basePath, `module_${num}`);
+      const newPath = path.join(basePath, `module_${num + 1}`);
+      if (fs.existsSync(oldPath)) {
+        fs.renameSync(oldPath, newPath);
+        completedNums.push(num);
+      }
     }
-  });
+  } catch (err) {
+    for (const num of [...completedNums].reverse()) {
+      const from = path.join(basePath, `module_${num + 1}`);
+      const to = path.join(basePath, `module_${num}`);
+      try {
+        if (fs.existsSync(from)) fs.renameSync(from, to);
+      } catch (_) {
+        /* best-effort rollback */
+      }
+    }
+    throw err;
+  }
+}
+
+/**
+ * Inverse of a full shiftModuleFolders(insertIndex): module_N → module_{N-1} for N > insertIndex (ascending).
+ */
+function unshiftModuleFolders(insertIndex) {
+  const basePath = process.env.SHARED_FOLDER;
+  if (!basePath || !fs.existsSync(basePath)) return;
+
+  const folderNumbers = fs
+    .readdirSync(basePath)
+    .filter((f) => /^module_\d+$/.test(f))
+    .map((f) => parseInt(f.split("_")[1], 10))
+    .filter((num) => num > insertIndex)
+    .sort((a, b) => a - b);
+
+  for (const num of folderNumbers) {
+    const from = path.join(basePath, `module_${num}`);
+    const to = path.join(basePath, `module_${num - 1}`);
+    if (fs.existsSync(from)) {
+      fs.renameSync(from, to);
+    }
+  }
+}
+
+function removeModuleFolder(orderIndex) {
+  const basePath = process.env.SHARED_FOLDER;
+  if (!basePath) return;
+  const folderPath = path.join(basePath, `module_${orderIndex}`);
+  if (fs.existsSync(folderPath)) {
+    fs.rmSync(folderPath, { recursive: true, force: true });
+  }
 }
 
 
@@ -336,57 +389,86 @@ const createModule = async (req, res) => {
   try {
     const { module_name, module_description, order_index, duration } = req.body;
 
+    assertSharedFolderReady();
+
     // Get current highest module index
     const max_order_index = await Modules.getMaxOrderIndex();
 
     // ========================= ADD AT END ============================
     if (max_order_index + 1 == order_index) {
-
-      // Create module in database
       const newModule = await Modules.createModule({
         module_name,
         module_description,
         order_index,
-        duration
+        duration,
       });
 
-      // Create folder for this module
-      const folderPath = path.join(process.env.SHARED_FOLDER, `module_${order_index}`);
-      if (!fs.existsSync(folderPath)) {
-        fs.mkdirSync(folderPath, { recursive: true });
+      try {
+        const folderPath = path.join(
+          process.env.SHARED_FOLDER,
+          `module_${order_index}`
+        );
+        if (!fs.existsSync(folderPath)) {
+          fs.mkdirSync(folderPath, { recursive: true });
+        }
+      } catch (folderErr) {
+        await Modules.deleteModuleById(newModule.module_id);
+        console.error("Create module folder failed; rolled back DB row:", folderErr);
+        throw folderErr;
       }
 
       return res.status(201).json({
         message: "Module created successfully",
-        module: newModule
+        module: newModule,
       });
     }
 
     // ====================== INSERT IN BETWEEN ========================
+    // Compensate on failure so DB order_index and module_* folders stay aligned.
 
-    // 1️⃣ Shift order indexes in DB
     await Modules.shiftModuleOrders(order_index);
 
-    // 2️⃣ Shift folders (descending rename)
-    shiftModuleFolders(order_index);
+    try {
+      shiftModuleFolders(order_index);
+    } catch (folderShiftErr) {
+      await Modules.unshiftModuleOrders(order_index);
+      console.error("Folder shift failed; rolled back DB order_index:", folderShiftErr);
+      throw folderShiftErr;
+    }
 
-    // 3️⃣ Create folder for new module index AFTER shifts
-    const newFolderPath = path.join(process.env.SHARED_FOLDER, `module_${order_index}`);
-    fs.mkdirSync(newFolderPath, { recursive: true });
+    const newFolderPath = path.join(
+      process.env.SHARED_FOLDER,
+      `module_${order_index}`
+    );
 
-    // 4️⃣ Create module row in DB
-    const newModule = await Modules.createModule({
-      module_name,
-      module_description,
-      order_index,
-      duration
-    });
+    try {
+      fs.mkdirSync(newFolderPath, { recursive: true });
+    } catch (mkdirErr) {
+      unshiftModuleFolders(order_index);
+      await Modules.unshiftModuleOrders(order_index);
+      console.error("mkdir failed; rolled back folders + DB:", mkdirErr);
+      throw mkdirErr;
+    }
 
-    return res.status(201).json({
-      message: "Module inserted successfully",
-      module: newModule
-    });
+    try {
+      const newModule = await Modules.createModule({
+        module_name,
+        module_description,
+        order_index,
+        duration,
+      });
 
+      return res.status(201).json({
+        message: "Module inserted successfully",
+        module: newModule,
+      });
+    } catch (insertErr) {
+      removeModuleFolder(order_index);
+      unshiftModuleFolders(order_index);
+      await Modules.unshiftModuleOrders(order_index);
+      console.error("INSERT failed; rolled back folder + shifts:", insertErr);
+      throw insertErr;
+    }
   } catch (err) {
     console.error("Error creating module:", err);
     return res.status(500).json({ error: "Internal server error" });
