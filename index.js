@@ -11,6 +11,7 @@ const AssessmentRouter = require("./routes/assessment_router");
 const LeaderboardRouter = require("./routes/leaderboard_router");
 const { AssessmentResultRouter } = require("./routes/assessment_result_router");
 const UserProgressRouter = require("./routes/user_progress_router");
+const LearningProgressRouter = require("./routes/learning_progress_router");
 
 const app = express();
 const PORT = 3000;
@@ -27,6 +28,7 @@ app.use("/assessment", AssessmentRouter);
 app.use("/leaderboard", LeaderboardRouter); 
 app.use("/assessment-result", AssessmentResultRouter);
 app.use("/user-progress", UserProgressRouter);
+app.use("/learning-progress", LearningProgressRouter);
 
 // ===================== SHARED FOLDER =====================
 const sharedFolder =

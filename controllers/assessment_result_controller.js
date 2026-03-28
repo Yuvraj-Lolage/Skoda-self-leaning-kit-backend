@@ -1,4 +1,8 @@
 const { AssessmentResult } = require("../models/assessment_result");
+const { TrainingModulesCatalog } = require("../models/training_modules_catalog");
+const { UserLearningPathProgress } = require("../models/user_learning_path_progress");
+
+const DEFAULT_TRACK_ID = 1;
 
 // const createNewAssementResult = async (req, res) => {
 //     try {
@@ -104,6 +108,15 @@ const submitAssessmentResult = async (req, res) => {
             score,
             duration
         });
+
+        const trackId = Number(req.body.trackId) || DEFAULT_TRACK_ID;
+        await UserLearningPathProgress.ensureRow(userId, trackId);
+        await TrainingModulesCatalog.syncUserModuleProgressRow(
+            userId,
+            trackId,
+            Number(moduleId)
+        );
+        await UserLearningPathProgress.recalculate(userId, trackId);
 
         return res.status(200).json({
             message: "Assessment submitted successfully",

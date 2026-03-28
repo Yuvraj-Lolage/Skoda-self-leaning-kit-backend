@@ -141,6 +141,14 @@ class SubModule {
     return rows.length > 0 ? rows[0] : null;
   }
 
+  static async countByModule(moduleId) {
+    const [rows] = await db.execute(
+      `SELECT COUNT(*) AS c FROM submodules WHERE module_id = ?`,
+      [moduleId]
+    );
+    return Number(rows[0]?.c || 0);
+  }
+
 }
 
 
