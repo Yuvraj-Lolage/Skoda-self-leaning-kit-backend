@@ -1,3 +1,4 @@
+const db = require("../config/db");
 const lastUpdatedMap = new Map(); // in-memory cache
 
 const THROTTLE_TIME = 60 * 1000; // 1 minute
