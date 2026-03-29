@@ -181,6 +181,18 @@ class AssessmentResult {
     );
     return rows;
   }
+
+  /**
+   * Module / catalog progression: any submitted attempt (pass or fail) completes the step.
+   * @returns {Set<number>}
+   */
+  static async getSubmittedAssessmentIdSetForUser(userId) {
+    const [rows] = await db.query(
+      `SELECT assessment_id FROM assessment_results WHERE user_id = ?`,
+      [userId]
+    );
+    return new Set(rows.map((r) => Number(r.assessment_id)));
+  }
 }
 
 

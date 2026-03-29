@@ -11,6 +11,10 @@ const AssessmentRouter = require("./routes/assessment_router");
 const LeaderboardRouter = require("./routes/leaderboard_router");
 const { AssessmentResultRouter } = require("./routes/assessment_result_router");
 const UserProgressRouter = require("./routes/user_progress_router");
+const LearningProgressRouter = require("./routes/learning_progress_router");
+const { AuthRouter } = require("./routes/auth_router");
+const { authenticationMiddleware } = require("./middlewares/jwt");
+const { updateLastActiveMiddleware } = require("./middlewares/update_last_active");
 
 const app = express();
 const PORT = 3000;
@@ -18,6 +22,10 @@ const PORT = 3000;
 // ===================== MIDDLEWARES =====================
 app.use(cors());
 app.use(express.json());  
+
+app.use("/auth", AuthRouter);
+app.use(authenticationMiddleware);
+app.use(updateLastActiveMiddleware)
 
 // ===================== ROUTES =====================
 app.use("/user", userRouter);
@@ -27,10 +35,16 @@ app.use("/assessment", AssessmentRouter);
 app.use("/leaderboard", LeaderboardRouter); 
 app.use("/assessment-result", AssessmentResultRouter);
 app.use("/user-progress", UserProgressRouter);
+app.use("/learning-progress", LearningProgressRouter);
 
 // ===================== SHARED FOLDER =====================
 const sharedFolder =
   "/Users/yuvrajsatishlolage/Projects/Skoda_project/Skoda-self-leaning-kit-backend/network_shared_folder";
+
+process.env.SHARED_FOLDER = process.env.SHARED_FOLDER || sharedFolder;
+process.env.PORT = process.env.PORT || String(PORT);
+process.env.PUBLIC_STATIC_URL =
+  process.env.PUBLIC_STATIC_URL || `http://localhost:${process.env.PORT}`;
 
 app.use("/", express.static(sharedFolder));
 
@@ -40,6 +54,7 @@ app.get("/", (req, res) => {
   res.status(200).json({ status: "OK", message: "API is healthy" });
 });
 // ===================== SERVER =====================
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+const listenPort = Number(process.env.PORT) || PORT;
+app.listen(listenPort, () => {
+  console.log(`Server is running on http://localhost:${listenPort}`);
 });

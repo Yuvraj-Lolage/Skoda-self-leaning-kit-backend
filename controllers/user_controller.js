@@ -1,6 +1,23 @@
 const jwt = require('jsonwebtoken');
 const { User } = require('../models/user');
-const { authenticationMiddleware, generateToken } = require('../middlewares/jwt')
+const { authenticationMiddleware, generateToken } = require('../middlewares/jwt');
+const { sendNewUserCredentials } = require('../services/email_service');
+
+function normalizeCallerRole(role) {
+    return String(role || "").toLowerCase().replace(/\s+/g, "_");
+}
+
+function canCreateUsers(callerRole) {
+    const n = normalizeCallerRole(callerRole);
+    return n === "admin" || n === "super_admin";
+}
+
+/** New accounts may only be User or Admin (matches app sidebar / JWT). */
+function normalizeAssignableRole(role) {
+    const n = String(role || "User").toLowerCase().replace(/\s+/g, "_");
+    if (n === "admin") return "Admin";
+    return "User";
+}
 
 const userSignUp = async (req, res) => {
     try {
@@ -31,6 +48,70 @@ const userSignUp = async (req, res) => {
             userId
         });
 
+    } catch (error) {
+        return res.status(500).json({ message: error.message });
+    }
+};
+
+const superAdminCreateUser = async (req, res) => {
+    try {
+        if (!canCreateUsers(req.user?.role)) {
+            return res.status(403).json({
+                message: "Only administrators can create users.",
+            });
+        }
+
+        const { name, email, password, role } = req.body;
+
+        if (!name || !email || !password) {
+            return res.status(400).json({
+                message: "name, email and password are required",
+            });
+        }
+
+        if (String(password).length < 8) {
+            return res.status(400).json({
+                message: "Password must be at least 8 characters.",
+            });
+        }
+
+        const exists = await User.userExists(email);
+        if (exists) {
+            return res.status(409).json({ message: "User already exists" });
+        }
+
+        const trimmedEmail = String(email).trim().toLowerCase();
+        const assignedRole = normalizeAssignableRole(role);
+
+        const userId = await User.create({
+            name: String(name).trim(),
+            email: trimmedEmail,
+            password,
+            role: assignedRole,
+        });
+
+        const mailResult = await sendNewUserCredentials({
+            to: trimmedEmail,
+            name: String(name).trim(),
+            email: trimmedEmail,
+            password,
+            role: assignedRole,
+        });
+
+        let message = "User created successfully. Login details were sent by email.";
+        if (mailResult.skipped) {
+            message =
+                "User created successfully. Configure SMTP to send welcome emails automatically.";
+        } else if (!mailResult.sent) {
+            message =
+                "User created successfully, but the welcome email could not be sent. Share credentials manually.";
+        }
+
+        return res.status(201).json({
+            message,
+            userId,
+            emailSent: Boolean(mailResult.sent),
+        });
     } catch (error) {
         return res.status(500).json({ message: error.message });
     }
@@ -158,6 +239,16 @@ const updateXP = async (req, res) => {
 };
 
 // Update your module exports at the bottom
-module.exports = { userSignUp, userLogin, updateXP, getUserById, updateWelcomeVisit, getToursByUserId, completeTour, getAllUsers };
+module.exports = {
+    userSignUp,
+    userLogin,
+    updateXP,
+    getUserById,
+    updateWelcomeVisit,
+    getToursByUserId,
+    completeTour,
+    getAllUsers,
+    superAdminCreateUser,
+};
 
 

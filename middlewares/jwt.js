@@ -57,7 +57,7 @@ const authenticationMiddleware = (req, res, next) => {
 
 
 const generateToken = (userData) => {
-  return jwt.sign(userData, process.env.JWT_SECRET_KEY, {expiresIn:30000});
+  return jwt.sign(userData, process.env.JWT_SECRET_KEY, {expiresIn:"2hrs"});
 };
 
 module.exports = { authenticationMiddleware, generateToken, AdminAuthenticationMiddleware };
