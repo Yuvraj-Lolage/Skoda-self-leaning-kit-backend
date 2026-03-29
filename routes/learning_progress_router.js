@@ -5,6 +5,7 @@ const {
   completeSubmodule,
   getModulesCatalog,
   getTrackProgress,
+  getModulesCatalogForAllUsers,
 } = require("../controllers/learning_progress_controller");
 
 const LearningProgressRouter = express.Router();
@@ -25,6 +26,12 @@ LearningProgressRouter.get(
   "/catalog",
   authenticationMiddleware,
   getModulesCatalog
+);
+
+LearningProgressRouter.get(
+  "/catalog-all-users",
+  authenticationMiddleware,
+  getModulesCatalogForAllUsers
 );
 
 LearningProgressRouter.get(

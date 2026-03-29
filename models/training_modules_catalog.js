@@ -303,10 +303,10 @@ class TrainingModulesCatalog {
           : moduleStatus === "completed"
             ? -1
             : this._firstIncompleteStepIndex(
-                steps,
-                progressBySubmoduleId,
-                submittedAssessmentIds
-              );
+              steps,
+              progressBySubmoduleId,
+              submittedAssessmentIds
+            );
 
       const submodulesOut = subs.map((s) => {
         const sid = Number(s.submodule_id);
@@ -394,6 +394,422 @@ class TrainingModulesCatalog {
       trackId,
       total_completed_modules: totalCompletedModules,
       modules: modulesOut,
+    };
+  }
+
+  // static async getCatalogForAllUsers(userId, trackId) {
+  //   const [moduleRows] = await db.execute(
+  //     `SELECT module_id, name, description, order_index, duration, created_at
+  //      FROM modules
+  //      ORDER BY order_index ASC, module_id ASC`
+  //   );
+
+  //   const [submoduleRows] = await db.execute(
+  //     `SELECT submodule_id, module_id, name, description, content_type, content_url,
+  //             order_index, duration, created_at
+  //      FROM submodules
+  //      ORDER BY module_id ASC, order_index ASC, submodule_id ASC`
+  //   );
+
+  //   const [uspRows] = await db.execute(
+  //     `SELECT submodule_id, module_id, status
+  //      FROM user_submodule_progress
+  //      WHERE user_id = ? AND track_id = ?`,
+  //     [userId, trackId]
+  //   );
+
+  //   const progressBySubmoduleId = new Map();
+  //   for (const row of uspRows) {
+  //     progressBySubmoduleId.set(Number(row.submodule_id), row.status);
+  //   }
+
+  //   const submittedAssessmentIds =
+  //     await AssessmentResult.getSubmittedAssessmentIdSetForUser(userId);
+
+  //   const subsByModuleId = new Map();
+  //   for (const s of submoduleRows) {
+  //     const mid = Number(s.module_id);
+  //     if (!subsByModuleId.has(mid)) subsByModuleId.set(mid, []);
+  //     subsByModuleId.get(mid).push(s);
+  //   }
+
+  //   const [allAssessmentRows] = await db.execute(
+  //     `SELECT assessment_id, module_id, submodule_id, title, description, created_at
+  //      FROM assessments
+  //      ORDER BY module_id ASC, submodule_id ASC, assessment_id ASC`
+  //   );
+
+  //   const assessmentsByModuleId = new Map();
+  //   for (const a of allAssessmentRows) {
+  //     const mid = Number(a.module_id);
+  //     if (!assessmentsByModuleId.has(mid)) assessmentsByModuleId.set(mid, []);
+  //     assessmentsByModuleId.get(mid).push(a);
+  //   }
+
+  //   const orderedModules = moduleRows.map((m) => ({
+  //     ...m,
+  //     module_id: Number(m.module_id),
+  //     order_index: Number(m.order_index),
+  //   }));
+
+  //   const moduleCompletion = orderedModules.map((m) => {
+  //     const subs = subsByModuleId.get(m.module_id) || [];
+  //     const aRows = assessmentsByModuleId.get(m.module_id) || [];
+  //     const bySub = this._groupAssessmentsBySubmodule(aRows);
+  //     const steps = this._buildSteps(m.module_id, subs, bySub);
+  //     const completed = this._isModuleFullyComplete(
+  //       steps,
+  //       progressBySubmoduleId,
+  //       submittedAssessmentIds
+  //     );
+  //     return {
+  //       completed,
+  //       totalSteps: steps.length,
+  //       steps,
+  //     };
+  //   });
+
+  //   let firstIncompleteIndex = -1;
+  //   for (let i = 0; i < orderedModules.length; i++) {
+  //     if (!moduleCompletion[i].completed) {
+  //       firstIncompleteIndex = i;
+  //       break;
+  //     }
+  //   }
+
+  //   const totalCompletedModules =
+  //     firstIncompleteIndex === -1 ? orderedModules.length : firstIncompleteIndex;
+
+  //   const modulesOut = orderedModules.map((m, idx) => {
+  //     let moduleStatus;
+  //     if (firstIncompleteIndex === -1) {
+  //       moduleStatus = "completed";
+  //     } else if (idx < firstIncompleteIndex) {
+  //       moduleStatus = "completed";
+  //     } else if (idx === firstIncompleteIndex) {
+  //       moduleStatus = "in_progress";
+  //     } else {
+  //       moduleStatus = "locked";
+  //     }
+
+  //     const subs = subsByModuleId.get(m.module_id) || [];
+  //     const aRows = assessmentsByModuleId.get(m.module_id) || [];
+  //     const assessmentsBySubId = this._groupAssessmentsBySubmodule(aRows);
+  //     const steps = moduleCompletion[idx].steps;
+
+  //     const fi =
+  //       moduleStatus === "locked"
+  //         ? 0
+  //         : moduleStatus === "completed"
+  //           ? -1
+  //           : this._firstIncompleteStepIndex(
+  //               steps,
+  //               progressBySubmoduleId,
+  //               submittedAssessmentIds
+  //             );
+
+  //     const submodulesOut = subs.map((s) => {
+  //       const sid = Number(s.submodule_id);
+  //       const subAssessments = (assessmentsBySubId.get(sid) || []).map((a) => {
+  //         const aid = Number(a.assessment_id);
+  //         let aStatus;
+  //         if (moduleStatus === "locked") {
+  //           aStatus = "locked";
+  //         } else if (moduleStatus === "completed") {
+  //           aStatus = "completed";
+  //         } else {
+  //           const stepIdx = steps.findIndex(
+  //             (st) => st.kind === "assessment" && st.assessmentId === aid
+  //           );
+  //           if (stepIdx === -1) aStatus = "locked";
+  //           else if (fi === -1) aStatus = "completed";
+  //           else if (stepIdx < fi) aStatus = "completed";
+  //           else if (stepIdx === fi) aStatus = "in_progress";
+  //           else aStatus = "locked";
+  //         }
+  //         if (submittedAssessmentIds.has(aid)) aStatus = "completed";
+
+  //         return {
+  //           assessment_id: aid,
+  //           module_id: Number(a.module_id),
+  //           submodule_id: sid,
+  //           title: a.title,
+  //           description: a.description,
+  //           created_at: a.created_at,
+  //           status: aStatus,
+  //         };
+  //       });
+
+  //       let subStatus;
+  //       if (moduleStatus === "locked") {
+  //         subStatus = "locked";
+  //       } else if (moduleStatus === "completed") {
+  //         subStatus = "completed";
+  //       } else {
+  //         const stepIdx = steps.findIndex(
+  //           (st) => st.kind === "submodule" && st.submoduleId === sid
+  //         );
+  //         if (stepIdx === -1) subStatus = "locked";
+  //         else if (fi === -1) subStatus = "completed";
+  //         else if (stepIdx < fi) subStatus = "completed";
+  //         else if (stepIdx === fi) subStatus = "in_progress";
+  //         else subStatus = "locked";
+  //       }
+
+  //       return {
+  //         submodule_id: sid,
+  //         module_id: Number(s.module_id),
+  //         name: s.name,
+  //         description: s.description,
+  //         content_type: s.content_type,
+  //         content_url: s.content_url,
+  //         order_index: Number(s.order_index),
+  //         duration: s.duration,
+  //         created_at: s.created_at,
+  //         status: subStatus,
+  //         assessments: subAssessments,
+  //       };
+  //     });
+
+  //     const mc = moduleCompletion[idx];
+
+  //     return {
+  //       module_id: m.module_id,
+  //       name: m.name,
+  //       description: m.description,
+  //       order_index: m.order_index,
+  //       duration: m.duration,
+  //       created_at: m.created_at,
+  //       status: moduleStatus,
+  //       submodule_count: subs.length,
+  //       assessment_count: aRows.length,
+  //       completed_submodule_count: subs.filter(
+  //         (s) => progressBySubmoduleId.get(Number(s.submodule_id)) === "completed"
+  //       ).length,
+  //       submodules: submodulesOut,
+  //     };
+  //   });
+
+  //   return {
+  //     trackId,
+  //     total_completed_modules: totalCompletedModules,
+  //     modules: modulesOut,
+  //   };
+  // }
+
+  //   static async getCatalogForAllUsers(trackId) {
+  //   const [moduleRows] = await db.execute(
+  //     `SELECT module_id, name, description, order_index, duration, created_at
+  //      FROM modules
+  //      ORDER BY order_index ASC, module_id ASC`
+  //   );
+
+  //   const [submoduleRows] = await db.execute(
+  //     `SELECT submodule_id, module_id, name, description, content_type, content_url,
+  //             order_index, duration, created_at
+  //      FROM submodules
+  //      ORDER BY module_id ASC, order_index ASC, submodule_id ASC`
+  //   );
+
+  //   // ✅ ALL USERS PROGRESS
+  //   const [uspRows] = await db.execute(
+  //     `SELECT user_id, submodule_id, module_id, status
+  //      FROM user_submodule_progress
+  //      WHERE track_id = ?`,
+  //     [trackId]
+  //   );
+
+  //   // ✅ GROUP BY USER
+  //   const progressByUser = new Map();
+
+  //   for (const row of uspRows) {
+  //     const uid = Number(row.user_id);
+
+  //     if (!progressByUser.has(uid)) {
+  //       progressByUser.set(uid, new Map());
+  //     }
+
+  //     progressByUser
+  //       .get(uid)
+  //       .set(Number(row.submodule_id), row.status);
+  //   }
+
+  //   // ✅ GROUP SUBMODULES BY MODULE
+  //   const subsByModuleId = new Map();
+  //   for (const s of submoduleRows) {
+  //     const mid = Number(s.module_id);
+  //     if (!subsByModuleId.has(mid)) subsByModuleId.set(mid, []);
+  //     subsByModuleId.get(mid).push(s);
+  //   }
+
+  //   const orderedModules = moduleRows.map((m) => ({
+  //     ...m,
+  //     module_id: Number(m.module_id),
+  //     order_index: Number(m.order_index),
+  //   }));
+
+  //   // ✅ FINAL RESULT
+  //   const result = [];
+
+  //   for (const [userId, userProgressMap] of progressByUser.entries()) {
+  //     const modulesOut = orderedModules.map((m) => {
+  //       const subs = subsByModuleId.get(m.module_id) || [];
+
+  //       const totalSubmodules = subs.length;
+
+  //       const completedSubmodules = subs.filter(
+  //         (s) =>
+  //           userProgressMap.get(Number(s.submodule_id)) === "completed"
+  //       ).length;
+
+  //       const completionPercent =
+  //         totalSubmodules === 0
+  //           ? 0
+  //           : Math.round((completedSubmodules / totalSubmodules) * 100);
+
+  //       return {
+  //         module_id: m.module_id,
+  //         name: m.name,
+  //         description: m.description,
+  //         order_index: m.order_index,
+  //         duration: m.duration,
+
+  //         completion_percent: completionPercent,
+  //         completed_submodule_count: completedSubmodules,
+  //         submodule_count: totalSubmodules,
+  //       };
+  //     });
+
+  //     result.push({
+  //       user_id: userId,
+  //       modules: modulesOut,
+  //     });
+  //   }
+
+  //   return {
+  //     trackId,
+  //     users: result,
+  //   };
+  // }
+
+  static async getCatalogForAllUsers(trackId) {
+    // ✅ 1. FETCH MODULES
+    const [moduleRows] = await db.execute(
+      `SELECT module_id, name, description, order_index, duration, created_at
+     FROM modules
+     ORDER BY order_index ASC, module_id ASC`
+    );
+
+    // ✅ 2. FETCH SUBMODULES
+    const [submoduleRows] = await db.execute(
+      `SELECT submodule_id, module_id, name, description, content_type, content_url,
+            order_index, duration, created_at
+     FROM submodules
+     ORDER BY module_id ASC, order_index ASC, submodule_id ASC`
+    );
+
+    // ✅ 3. FETCH ALL USERS
+    const [userRows] = await db.execute(
+      `SELECT id, name, email, xp, last_active
+     FROM users`
+    );
+
+    // ✅ 4. FETCH ALL USERS PROGRESS
+    const [uspRows] = await db.execute(
+      `SELECT user_id, submodule_id, module_id, status
+     FROM user_submodule_progress
+     WHERE track_id = ?`,
+      [trackId]
+    );
+
+    // ✅ 5. GROUP PROGRESS BY USER
+    const progressByUser = new Map();
+
+    for (const row of uspRows) {
+      const uid = Number(row.user_id);
+
+      if (!progressByUser.has(uid)) {
+        progressByUser.set(uid, new Map());
+      }
+
+      progressByUser
+        .get(uid)
+        .set(Number(row.submodule_id), row.status);
+    }
+
+    // ✅ 6. GROUP SUBMODULES BY MODULE
+    const subsByModuleId = new Map();
+    for (const s of submoduleRows) {
+      const mid = Number(s.module_id);
+      if (!subsByModuleId.has(mid)) subsByModuleId.set(mid, []);
+      subsByModuleId.get(mid).push(s);
+    }
+
+    // ✅ 7. NORMALIZE MODULE DATA
+    const orderedModules = moduleRows.map((m) => ({
+      ...m,
+      module_id: Number(m.module_id),
+      order_index: Number(m.order_index),
+    }));
+
+    // ✅ 8. BUILD FINAL RESULT FOR ALL USERS
+    const result = [];
+
+    for (const user of userRows) {
+      const userId = Number(user.id);
+      const userProgressMap =
+        progressByUser.get(userId) || new Map();
+
+      const modulesOut = orderedModules.map((m) => {
+        const subs = subsByModuleId.get(m.module_id) || [];
+
+        const totalSubmodules = subs.length;
+
+        const completedSubmodules = subs.filter(
+          (s) =>
+            userProgressMap.get(Number(s.submodule_id)) === "completed"
+        ).length;
+
+        const completionPercent =
+          totalSubmodules === 0
+            ? 0
+            : Math.round((completedSubmodules / totalSubmodules) * 100);
+
+        return {
+          module_id: m.module_id,
+          name: m.name,
+          description: m.description,
+          order_index: m.order_index,
+          duration: m.duration,
+
+          completion_percent: completionPercent,
+          completed_submodule_count: completedSubmodules,
+          submodule_count: totalSubmodules,
+        };
+      });
+
+      result.push({
+        user_id: userId,
+        name: user.name,
+        email: user.email,
+        xp: user.xp,
+        last_active: user.last_active,
+
+        modules: modulesOut,
+      });
+    }
+
+    // ✅ 9. SORT USERS BY XP (RANKING)
+    result.sort((a, b) => b.xp - a.xp);
+
+    // ✅ 10. ADD RANK
+    result.forEach((user, index) => {
+      user.rank = index + 1;
+    });
+
+    return {
+      trackId,
+      users: result,
     };
   }
 }

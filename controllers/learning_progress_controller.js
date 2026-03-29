@@ -132,6 +132,20 @@ const getModulesCatalog = async (req, res) => {
   }
 };
 
+const getModulesCatalogForAllUsers = async (req, res) => {
+  try {
+    const trackId = Number(req.query.trackId) || DEFAULT_TRACK_ID;
+
+    const catalog =
+      await TrainingModulesCatalog.getCatalogForAllUsers(trackId);
+
+    return res.status(200).json(catalog);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
 const getTrackProgress = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -166,4 +180,5 @@ module.exports = {
   completeSubmodule,
   getModulesCatalog,
   getTrackProgress,
+  getModulesCatalogForAllUsers
 };

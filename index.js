@@ -12,6 +12,9 @@ const LeaderboardRouter = require("./routes/leaderboard_router");
 const { AssessmentResultRouter } = require("./routes/assessment_result_router");
 const UserProgressRouter = require("./routes/user_progress_router");
 const LearningProgressRouter = require("./routes/learning_progress_router");
+const { AuthRouter } = require("./routes/auth_router");
+const { authenticationMiddleware } = require("./middlewares/jwt");
+const { updateLastActiveMiddleware } = require("./middlewares/update_last_active");
 
 const app = express();
 const PORT = 3000;
@@ -19,6 +22,10 @@ const PORT = 3000;
 // ===================== MIDDLEWARES =====================
 app.use(cors());
 app.use(express.json());  
+
+app.use("/auth", AuthRouter);
+app.use(authenticationMiddleware);
+app.use(updateLastActiveMiddleware)
 
 // ===================== ROUTES =====================
 app.use("/user", userRouter);
